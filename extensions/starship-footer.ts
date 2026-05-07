@@ -150,7 +150,7 @@ export default function (pi: ExtensionAPI) {
           }
 
           if (thinkingLevel !== "off") {
-            rightParts.push(" " + dim("◆ ") + cyan(thinkingLevel));
+            rightParts.push(" " + dim("◆ ") + cyan(`${thinkingLevel} thinking`) + " " + dim("◆"));
           }
 
           let inputTok = 0, outputTok = 0, totalCost = 0;
