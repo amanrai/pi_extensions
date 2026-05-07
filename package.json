@@ -1,0 +1,22 @@
+{
+  "name": "pi-extensions-amanrai",
+  "version": "0.1.0",
+  "description": "Personal Pi extensions: smart status, session switcher, and starship footer.",
+  "keywords": [
+    "pi-package",
+    "pi-extension"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "typebox": "*"
+  }
+}
