@@ -324,34 +324,58 @@ async function patchTicket(ticketId: string, summary: string, endSession: boolea
 	});
 }
 
+function setRecorderProgress(ctx: ExtensionContext, line?: string) {
+	if (!ctx.hasUI) return;
+	if (!line) {
+		ctx.ui.setStatus("scryer-recorder", undefined);
+		ctx.ui.setWidget("scryer-recorder", undefined);
+		return;
+	}
+	ctx.ui.setStatus("scryer-recorder", line);
+	ctx.ui.setWidget("scryer-recorder", [`▸ Scryer recorder: ${line}`], { placement: "belowEditor" });
+}
+
 async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSession = false) {
 	activeCtx = ctx;
-	if (!activePi) throw new Error("recorder pi api missing");
-	state ??= await loadState(activePi, ctx);
-	const summary = await generateSummary(ctx, reason, endSession);
-	await writeLocalSummary(reason, summary, endSession);
+	try {
+		setRecorderProgress(ctx, `saving (${reason})…`);
+		if (!activePi) throw new Error("recorder pi api missing");
+		state ??= await loadState(activePi, ctx);
 
-	if (await ensurePm(ctx)) {
-		let ticketId = await ensureTicket(!endSession);
-		try {
-			await patchTicket(ticketId, summary, endSession);
-		} catch (err: any) {
-			if (!String(err?.message ?? err).includes("404")) throw err;
-			state.ticketId = undefined;
-			state.currentDate = undefined;
-			ticketId = await ensureTicket(false);
-			await patchTicket(ticketId, summary, endSession);
+		setRecorderProgress(ctx, "summarizing with active model…");
+		const summary = await generateSummary(ctx, reason, endSession);
+
+		setRecorderProgress(ctx, "writing local summary…");
+		await writeLocalSummary(reason, summary, endSession);
+
+		setRecorderProgress(ctx, "checking PM system…");
+		if (await ensurePm(ctx)) {
+			setRecorderProgress(ctx, "creating/updating Dailies ticket…");
+			let ticketId = await ensureTicket(!endSession);
+			try {
+				await patchTicket(ticketId, summary, endSession);
+			} catch (err: any) {
+				if (!String(err?.message ?? err).includes("404")) throw err;
+				setRecorderProgress(ctx, "ticket missing; creating a fresh one…");
+				state.ticketId = undefined;
+				state.currentDate = undefined;
+				ticketId = await ensureTicket(false);
+				await patchTicket(ticketId, summary, endSession);
+			}
+			if (endSession) state.finalized = true;
+		} else {
+			setRecorderProgress(ctx, "PM unavailable; writing outbox entry…");
+			await writeOutbox(reason, summary, endSession);
 		}
-		if (endSession) state.finalized = true;
-	} else {
-		await writeOutbox(reason, summary, endSession);
+		state.summary = summary;
+		state.lastSummaryAt = Date.now();
+		state.lastActivityAt = Date.now();
+		state.outputTokensSinceSummary = 0;
+		await saveState();
+		if (ctx.hasUI) ctx.ui.notify(`Scryer recorder saved summary (${reason})`, "info");
+	} finally {
+		setRecorderProgress(ctx, undefined);
 	}
-	state.summary = summary;
-	state.lastSummaryAt = Date.now();
-	state.lastActivityAt = Date.now();
-	state.outputTokensSinceSummary = 0;
-	await saveState();
-	if (ctx.hasUI) ctx.ui.notify(`Scryer recorder saved summary (${reason})`, "info");
 }
 
 function scheduleIdle(ctx: ExtensionContext) {
