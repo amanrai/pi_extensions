@@ -2,7 +2,7 @@ import { complete } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 const PM_URL = process.env.SCRYER_PM_URL ?? "http://127.0.0.1:43210";
 const DAILIES_SLUG = process.env.SCRYER_DAILIES_SLUG ?? "dailies";
@@ -24,10 +24,16 @@ async function api(path: string, init?: RequestInit): Promise<any> {
 	return text ? JSON.parse(text) : undefined;
 }
 
-async function ensureGitRepo(ctx: ExtensionContext): Promise<string | undefined> {
-	try { return await exec("git", ["rev-parse", "--show-toplevel"], ctx.cwd); }
+function targetCwd(ctx: ExtensionContext, args: string): string {
+	const raw = args.trim();
+	if (!raw) return ctx.cwd;
+	return resolve(ctx.cwd, raw.replace(/^~(?=\/|$)/, process.env.HOME ?? "~"));
+}
+
+async function ensureGitRepo(ctx: ExtensionContext, cwd: string): Promise<string | undefined> {
+	try { return await exec("git", ["rev-parse", "--show-toplevel"], cwd); }
 	catch {
-		ctx.ui.notify("Not a git repo. Initialize/connect a remote first, then rerun this command.", "warning");
+		ctx.ui.notify(`Not a git repo: ${cwd}. Initialize/connect a remote first, then rerun this command.`, "warning");
 		return undefined;
 	}
 }
@@ -155,11 +161,12 @@ async function applyPoint(ctx: ExtensionContext, point: Point, repo: any, pm: Aw
 
 export default function (pi: ExtensionAPI) {
 	pi.registerCommand("where-are-we", {
-		description: "Read-only repo vs Scryer PM briefing",
-		handler: async (_args, ctx) => {
+		description: "Read-only repo vs Scryer PM briefing. Usage: /where-are-we [folder]",
+		handler: async (args, ctx) => {
 			try {
-				ctx.ui.setStatus("scryer-bootstrap", "collecting repo/PM state…");
-				const root = await ensureGitRepo(ctx); if (!root) return;
+				const cwd = targetCwd(ctx, args);
+				ctx.ui.setStatus("scryer-bootstrap", `collecting repo/PM state for ${cwd}…`);
+				const root = await ensureGitRepo(ctx, cwd); if (!root) return;
 				const repo = await collectRepo(root); const pm = await collectPm();
 				ctx.ui.setStatus("scryer-bootstrap", "analyzing…");
 				const report = await askModel(ctx, reportPrompt(repo, pm));
@@ -170,11 +177,12 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("bootstrap-scryer", {
-		description: "Interactively reconcile repo work with Scryer PM",
-		handler: async (_args, ctx) => {
+		description: "Interactively reconcile repo work with Scryer PM. Usage: /bootstrap-scryer [folder]",
+		handler: async (args, ctx) => {
 			try {
-				ctx.ui.setStatus("scryer-bootstrap", "collecting repo/PM state…");
-				const root = await ensureGitRepo(ctx); if (!root) return;
+				const cwd = targetCwd(ctx, args);
+				ctx.ui.setStatus("scryer-bootstrap", `collecting repo/PM state for ${cwd}…`);
+				const root = await ensureGitRepo(ctx, cwd); if (!root) return;
 				const repo = await collectRepo(root); const pm = await collectPm();
 				ctx.ui.setStatus("scryer-bootstrap", "building reconciliation points…");
 				const points = parseJsonPoints(await askModel(ctx, jsonPrompt(repo, pm)));
