@@ -182,18 +182,36 @@ async function findWorkTaskType(projectId: string): Promise<string> {
 	return (types.find((t: any) => t.key === "work") ?? types[0]).id;
 }
 
+async function ticketExists(ticketId: string): Promise<boolean> {
+	try {
+		await api(`/api/tasks/${ticketId}`);
+		return true;
+	} catch (err: any) {
+		if (String(err?.message ?? err).includes("404")) return false;
+		throw err;
+	}
+}
+
 async function ensureTicket(finalizePrevious = true): Promise<string> {
 	if (!state) throw new Error("recorder state missing");
 	const nowDate = today();
 	const now = Date.now();
 	const dateChanged = state.currentDate && state.currentDate !== nowDate;
 	const staleEnough = !state.lastActivityAt || now - state.lastActivityAt >= NEW_DAILY_HOURS * 60 * 60 * 1000;
-	if (state.ticketId && (!dateChanged || !staleEnough)) return state.ticketId;
+	if (state.ticketId && (!dateChanged || !staleEnough)) {
+		if (await ticketExists(state.ticketId)) return state.ticketId;
+		state.ticketId = undefined;
+		state.currentDate = undefined;
+	}
 	if (state.ticketId && finalizePrevious) {
-		await api(`/api/tasks/${state.ticketId}`, {
-			method: "PATCH",
-			body: JSON.stringify({ status: "human_reviewed_and_closed" }),
-		});
+		try {
+			await api(`/api/tasks/${state.ticketId}`, {
+				method: "PATCH",
+				body: JSON.stringify({ status: "human_reviewed_and_closed" }),
+			});
+		} catch (err: any) {
+			if (!String(err?.message ?? err).includes("404")) throw err;
+		}
 	}
 	const project = await findDailiesProject();
 	const taskTypeId = await findWorkTaskType(project.id);
