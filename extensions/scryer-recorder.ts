@@ -442,17 +442,23 @@ async function ensureActiveTicketSelected(ctx: ExtensionContext): Promise<boolea
 	return true;
 }
 
+function activeTargetLabel(): string {
+	const project = state?.activeProjectName ?? "Unknown project";
+	const ticket = state?.activeTaskTitle ?? "Unknown ticket";
+	return `${project}/${ticket}`;
+}
+
 async function updateActiveTaskDescription(ctx: ExtensionContext) {
 	if (!state || !(await ensureActiveTicketSelected(ctx))) return;
 	setRecorderProgress(ctx, "summarizing for active ticket description…");
 	const summary = await generateSummary(ctx, "update-ticket", false);
 	await writeLocalSummary("update-ticket", summary, false);
-	setRecorderProgress(ctx, "updating active ticket description…");
+	setRecorderProgress(ctx, `updating ${activeTargetLabel()}…`);
 	await patchActiveTask(summary);
 	state.summary = summary;
 	state.lastSummaryAt = Date.now();
 	await saveState();
-	if (ctx.hasUI) ctx.ui.notify(`Updated ticket: ${state.activeTaskTitle}`, "info");
+	if (ctx.hasUI) ctx.ui.notify(`Updated ticket: ${activeTargetLabel()}`, "info");
 }
 
 async function addActiveTaskComment(ctx: ExtensionContext) {
@@ -460,12 +466,12 @@ async function addActiveTaskComment(ctx: ExtensionContext) {
 	setRecorderProgress(ctx, "summarizing for active ticket comment…");
 	const summary = await generateSummary(ctx, "add-comments", false);
 	await writeLocalSummary("add-comments", summary, false);
-	setRecorderProgress(ctx, "adding active ticket comment…");
+	setRecorderProgress(ctx, `adding comment to ${activeTargetLabel()}…`);
 	await commentOnActiveTask(summary);
 	state.summary = summary;
 	state.lastSummaryAt = Date.now();
 	await saveState();
-	if (ctx.hasUI) ctx.ui.notify(`Added comment to ticket: ${state.activeTaskTitle}`, "info");
+	if (ctx.hasUI) ctx.ui.notify(`Added comment to ticket: ${activeTargetLabel()}`, "info");
 }
 
 function setRecorderProgress(ctx: ExtensionContext, line?: string) {
