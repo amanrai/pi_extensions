@@ -15,6 +15,7 @@ const NEW_DAILY_HOURS = Number(process.env.SCRYER_RECORDER_NEW_DAILY_HOURS ?? 3)
 const RECORDER_DIR = join(homedir(), ".pi", "agent", "scryer-recorder");
 const STATE_DIR = join(RECORDER_DIR, "state");
 const OUTBOX_DIR = join(RECORDER_DIR, "outbox");
+const SUMMARIES_DIR = join(RECORDER_DIR, "summaries");
 
 type RecorderState = {
 	sessionKey: string;
@@ -41,6 +42,7 @@ type ToolEvent = {
 let state: RecorderState | undefined;
 let idleTimer: NodeJS.Timeout | undefined;
 let activeCtx: ExtensionContext | undefined;
+let activePi: ExtensionAPI | undefined;
 let recentTools: ToolEvent[] = [];
 let recentUserPrompts: string[] = [];
 
@@ -59,10 +61,27 @@ function sessionKey(ctx: ExtensionContext): string {
 	return createHash("sha1").update(`${ctx.cwd}:${Date.now()}`).digest("hex");
 }
 
-function sessionName(ctx: ExtensionContext): string {
-	const file = ctx.sessionManager.getSessionFile?.();
-	if (file) return basename(file).replace(/\.[^.]+$/, "");
-	return basename(ctx.cwd || process.cwd()) || "pi-session";
+function isUglySessionName(name: string): boolean {
+	return /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}/.test(name) || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i.test(name);
+}
+
+function generatedSessionName(ctx: ExtensionContext): string {
+	const cwdName = basename(ctx.cwd || process.cwd()) || "pi-session";
+	const stamp = new Date().toLocaleString(undefined, {
+		month: "short",
+		day: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+	});
+	return `${cwdName} — ${stamp}`;
+}
+
+function sessionName(pi: ExtensionAPI, ctx: ExtensionContext): string {
+	const current = pi.getSessionName?.();
+	if (current && !isUglySessionName(current)) return current;
+	const generated = generatedSessionName(ctx);
+	pi.setSessionName?.(generated);
+	return generated;
 }
 
 async function readJson<T>(path: string): Promise<T | undefined> {
@@ -82,14 +101,18 @@ function statePath(key: string): string {
 	return join(STATE_DIR, `${key}.json`);
 }
 
-async function loadState(ctx: ExtensionContext): Promise<RecorderState> {
+async function loadState(pi: ExtensionAPI, ctx: ExtensionContext): Promise<RecorderState> {
 	const key = sessionKey(ctx);
+	const name = sessionName(pi, ctx);
 	const existing = await readJson<RecorderState>(statePath(key));
-	if (existing) return existing;
+	if (existing) {
+		if (!existing.sessionName || isUglySessionName(existing.sessionName)) existing.sessionName = name;
+		return existing;
+	}
 	const cwd = ctx.cwd || process.cwd();
 	return {
 		sessionKey: key,
-		sessionName: sessionName(ctx),
+		sessionName: name,
 		cwd,
 		cwdTag: `cwd:${displayPath(cwd)}`,
 		outputTokensSinceSummary: 0,
@@ -174,10 +197,11 @@ async function ensureTicket(finalizePrevious = true): Promise<string> {
 	}
 	const project = await findDailiesProject();
 	const taskTypeId = await findWorkTaskType(project.id);
+	const title = `Pi Daily — ${nowDate} — ${state.sessionName}`;
 	const task = await api("/api/tasks", {
 		method: "POST",
 		body: JSON.stringify({
-			title: `Pi Daily — ${nowDate} — ${state.sessionName}`,
+			title,
 			project_id: project.id,
 			task_type_id: taskTypeId,
 			status: "in_execution",
@@ -253,21 +277,53 @@ async function writeOutbox(reason: string, summary: string, endSession: boolean)
 	await writeFile(file, JSON.stringify({ reason, endSession, state, summary, pmUrl: PM_URL }, null, 2));
 }
 
+async function writeLocalSummary(reason: string, summary: string, endSession: boolean) {
+	await mkdir(SUMMARIES_DIR, { recursive: true });
+	const safeSession = (state?.sessionName ?? "session").replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 80);
+	const file = join(SUMMARIES_DIR, `${today()}-${safeSession}.md`);
+	await writeFile(file, [
+		`# ${state?.sessionName ?? "Pi session"}`,
+		"",
+		`- Reason: ${reason}`,
+		`- End session: ${endSession ? "yes" : "no"}`,
+		`- Ticket: ${state?.ticketId ?? "none"}`,
+		`- CWD: ${state?.cwd ?? "unknown"}`,
+		"",
+		summary,
+	].join("\n"));
+}
+
+async function patchTicket(ticketId: string, summary: string, endSession: boolean) {
+	if (!state) throw new Error("recorder state missing");
+	return api(`/api/tasks/${ticketId}`, {
+		method: "PATCH",
+		body: JSON.stringify({
+			title: `Pi Daily — ${state.currentDate ?? today()} — ${state.sessionName}`,
+			description_md: summary,
+			status: endSession ? "human_reviewed_and_closed" : "in_execution",
+			tag_names: [state.cwdTag],
+		}),
+	});
+}
+
 async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSession = false) {
 	activeCtx = ctx;
-	state ??= await loadState(ctx);
+	if (!activePi) throw new Error("recorder pi api missing");
+	state ??= await loadState(activePi, ctx);
 	const summary = await generateSummary(ctx, reason, endSession);
+	await writeLocalSummary(reason, summary, endSession);
 
 	if (await ensurePm(ctx)) {
-		const ticketId = await ensureTicket(!endSession);
-		await api(`/api/tasks/${ticketId}`, {
-			method: "PATCH",
-			body: JSON.stringify({
-				description_md: summary,
-				status: endSession ? "human_reviewed_and_closed" : "in_execution",
-				tag_names: [state.cwdTag],
-			}),
-		});
+		let ticketId = await ensureTicket(!endSession);
+		try {
+			await patchTicket(ticketId, summary, endSession);
+		} catch (err: any) {
+			if (!String(err?.message ?? err).includes("404")) throw err;
+			state.ticketId = undefined;
+			state.currentDate = undefined;
+			ticketId = await ensureTicket(false);
+			await patchTicket(ticketId, summary, endSession);
+		}
 		if (endSession) state.finalized = true;
 	} else {
 		await writeOutbox(reason, summary, endSession);
@@ -293,16 +349,17 @@ function outputTokens(message: AssistantMessage): number {
 }
 
 export default function (pi: ExtensionAPI) {
+	activePi = pi;
 	pi.on("session_start", async (_event, ctx) => {
 		activeCtx = ctx;
-		state = await loadState(ctx);
+		state = await loadState(pi, ctx);
 		state.lastActivityAt = Date.now();
 		await saveState();
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		activeCtx = ctx;
-		state ??= await loadState(ctx);
+		state ??= await loadState(pi, ctx);
 		state.lastActivityAt = Date.now();
 		recentUserPrompts.push(event.prompt ?? "");
 		if (recentUserPrompts.length > 30) recentUserPrompts = recentUserPrompts.slice(-30);
@@ -325,7 +382,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("message_end", async (event, ctx) => {
 		if (event.message.role !== "assistant") return;
-		state ??= await loadState(ctx);
+		state ??= await loadState(pi, ctx);
 		state.outputTokensSinceSummary += outputTokens(event.message as AssistantMessage);
 		state.lastActivityAt = Date.now();
 		await saveState();
@@ -336,7 +393,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("agent_end", async (_event, ctx) => {
 		activeCtx = ctx;
-		state ??= await loadState(ctx);
+		state ??= await loadState(pi, ctx);
 		state.lastActivityAt = Date.now();
 		await saveState();
 		scheduleIdle(ctx);
