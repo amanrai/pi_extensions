@@ -186,31 +186,43 @@ async function findWorkTaskType(projectId: string): Promise<string> {
 	return (types.find((t: any) => t.key === "work") ?? types[0]).id;
 }
 
-async function chooseActiveProjectAndTask(ctx: ExtensionContext) {
-	if (!state || state.activeProjectId || !ctx.hasUI) return;
+async function pickActiveProject(ctx: ExtensionContext): Promise<boolean> {
+	if (!state || !ctx.hasUI) return false;
 	const projects = await api("/api/projects");
 	const visible = projects.filter((p: any) => p.slug !== DAILIES_SLUG && !String(p.name).startsWith("~"));
 	const labels = ["No active project / greenfield", ...visible.map((p: any) => `${p.name} (${p.slug})`)];
 	const projectChoice = await ctx.ui.select("Which project does this Pi session apply to?", labels);
-	if (!projectChoice || projectChoice === labels[0]) return;
+	if (!projectChoice || projectChoice === labels[0]) return false;
 	const project = visible[labels.indexOf(projectChoice) - 1];
-	if (!project) return;
+	if (!project) return false;
 	state.activeProjectId = project.id;
 	state.activeProjectName = project.name;
+	state.activeTaskId = undefined;
+	state.activeTaskTitle = undefined;
+	await saveState();
+	ctx.ui.notify(`Scryer recorder project: ${project.name}`, "info");
+	return true;
+}
 
-	const tasks = await api(`/api/tasks?project_id=${encodeURIComponent(project.id)}`);
+async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
+	if (!state || !ctx.hasUI) return false;
+	if (!state.activeProjectId) {
+		ctx.ui.notify("Pick a project first with /pp or /pick-project", "warning");
+		return false;
+	}
+	const tasks = await api(`/api/tasks?project_id=${encodeURIComponent(state.activeProjectId)}`);
 	const taskLabels = ["Create a new ticket", ...tasks.map((t: any) => `${t.title} [${t.status}]`)];
-	const taskChoice = await ctx.ui.select(`Which ticket in ${project.name}?`, taskLabels);
-	if (!taskChoice) return;
+	const taskChoice = await ctx.ui.select(`Which ticket in ${state.activeProjectName ?? "project"}?`, taskLabels);
+	if (!taskChoice) return false;
 	if (taskChoice === taskLabels[0]) {
 		const title = await ctx.ui.input("New ticket title", `Pi work — ${state.sessionName}`);
-		if (!title) return;
-		const taskTypeId = await findWorkTaskType(project.id);
+		if (!title) return false;
+		const taskTypeId = await findWorkTaskType(state.activeProjectId);
 		const task = await api("/api/tasks", {
 			method: "POST",
 			body: JSON.stringify({
 				title,
-				project_id: project.id,
+				project_id: state.activeProjectId,
 				task_type_id: taskTypeId,
 				status: "in_execution",
 				description_md: "# Pi work\n\nRecorder summary pending.",
@@ -223,11 +235,18 @@ async function chooseActiveProjectAndTask(ctx: ExtensionContext) {
 		state.activeTaskTitle = task.title;
 	} else {
 		const task = tasks[taskLabels.indexOf(taskChoice) - 1];
-		if (!task) return;
+		if (!task) return false;
 		state.activeTaskId = task.id;
 		state.activeTaskTitle = task.title;
 	}
 	await saveState();
+	ctx.ui.notify(`Scryer recorder ticket: ${state.activeTaskTitle}`, "info");
+	return true;
+}
+
+async function chooseActiveProjectAndTask(ctx: ExtensionContext) {
+	if (!state || state.activeProjectId || !ctx.hasUI) return;
+	if (await pickActiveProject(ctx)) await pickActiveTicket(ctx);
 }
 
 async function ticketExists(ticketId: string): Promise<boolean> {
@@ -390,6 +409,65 @@ async function patchActiveTask(summary: string) {
 	}
 }
 
+async function commentOnActiveTask(summary: string) {
+	if (!state?.activeTaskId) return;
+	try {
+		await api("/api/comments", {
+			method: "POST",
+			body: JSON.stringify({
+				task_id: state.activeTaskId,
+				author_role: "pi",
+				author_instance_key: "scryer-recorder",
+				body_md: summary,
+				body_format: "markdown",
+			}),
+		});
+	} catch (err: any) {
+		if (!String(err?.message ?? err).includes("404")) throw err;
+		state.activeTaskId = undefined;
+		state.activeTaskTitle = undefined;
+	}
+}
+
+async function ensureActiveTicketSelected(ctx: ExtensionContext): Promise<boolean> {
+	if (!state) return false;
+	if (!state.activeProjectId) {
+		if (ctx.hasUI) ctx.ui.notify("Pick a project and ticket first with /pp then /pt", "warning");
+		return false;
+	}
+	if (!state.activeTaskId) {
+		if (ctx.hasUI) ctx.ui.notify("Pick a ticket first with /pt or /pick-ticket", "warning");
+		return false;
+	}
+	return true;
+}
+
+async function updateActiveTaskDescription(ctx: ExtensionContext) {
+	if (!state || !(await ensureActiveTicketSelected(ctx))) return;
+	setRecorderProgress(ctx, "summarizing for active ticket description…");
+	const summary = await generateSummary(ctx, "update-ticket", false);
+	await writeLocalSummary("update-ticket", summary, false);
+	setRecorderProgress(ctx, "updating active ticket description…");
+	await patchActiveTask(summary);
+	state.summary = summary;
+	state.lastSummaryAt = Date.now();
+	await saveState();
+	if (ctx.hasUI) ctx.ui.notify(`Updated ticket: ${state.activeTaskTitle}`, "info");
+}
+
+async function addActiveTaskComment(ctx: ExtensionContext) {
+	if (!state || !(await ensureActiveTicketSelected(ctx))) return;
+	setRecorderProgress(ctx, "summarizing for active ticket comment…");
+	const summary = await generateSummary(ctx, "add-comments", false);
+	await writeLocalSummary("add-comments", summary, false);
+	setRecorderProgress(ctx, "adding active ticket comment…");
+	await commentOnActiveTask(summary);
+	state.summary = summary;
+	state.lastSummaryAt = Date.now();
+	await saveState();
+	if (ctx.hasUI) ctx.ui.notify(`Added comment to ticket: ${state.activeTaskTitle}`, "info");
+}
+
 function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 	if (!ctx.hasUI) return;
 	if (!line) {
@@ -516,6 +594,33 @@ export default function (pi: ExtensionAPI) {
 		if (idleTimer) clearTimeout(idleTimer);
 		await saveState();
 	});
+
+	const register = (name: string, description: string, handler: (ctx: ExtensionContext) => Promise<void>) => {
+		pi.registerCommand(name, {
+			description,
+			handler: async (_args, ctx) => {
+				try {
+					activeCtx = ctx;
+					state ??= await loadState(pi, ctx);
+					if (!(await ensurePm(ctx))) return;
+					await handler(ctx);
+				} catch (err: any) {
+					if (ctx.hasUI) ctx.ui.notify(`Scryer recorder ${name} failed: ${err?.message ?? err}`, "error");
+				} finally {
+					setRecorderProgress(ctx, undefined);
+				}
+			},
+		});
+	};
+
+	register("pp", "Pick active PM project for Scryer recorder", async (ctx) => { await pickActiveProject(ctx); });
+	register("pick-project", "Pick active PM project for Scryer recorder", async (ctx) => { await pickActiveProject(ctx); });
+	register("pt", "Pick active PM ticket for Scryer recorder", async (ctx) => { await pickActiveTicket(ctx); });
+	register("pick-ticket", "Pick active PM ticket for Scryer recorder", async (ctx) => { await pickActiveTicket(ctx); });
+	register("ut", "Update selected ticket description from recorder summary", updateActiveTaskDescription);
+	register("update-ticket", "Update selected ticket description from recorder summary", updateActiveTaskDescription);
+	register("ac", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
+	register("add-comments", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 
 	pi.registerCommand("save", {
 		description: "Save a Scryer recorder summary to the Dailies PM ticket",
