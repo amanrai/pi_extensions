@@ -30,6 +30,10 @@ type RecorderState = {
 	outputTokensSinceSummary: number;
 	summary: string;
 	finalized?: boolean;
+	activeProjectId?: string;
+	activeProjectName?: string;
+	activeTaskId?: string;
+	activeTaskTitle?: string;
 };
 
 type ToolEvent = {
@@ -182,6 +186,50 @@ async function findWorkTaskType(projectId: string): Promise<string> {
 	return (types.find((t: any) => t.key === "work") ?? types[0]).id;
 }
 
+async function chooseActiveProjectAndTask(ctx: ExtensionContext) {
+	if (!state || state.activeProjectId || !ctx.hasUI) return;
+	const projects = await api("/api/projects");
+	const visible = projects.filter((p: any) => p.slug !== DAILIES_SLUG && !String(p.name).startsWith("~"));
+	const labels = ["No active project / greenfield", ...visible.map((p: any) => `${p.name} (${p.slug})`)];
+	const projectChoice = await ctx.ui.select("Which project does this Pi session apply to?", labels);
+	if (!projectChoice || projectChoice === labels[0]) return;
+	const project = visible[labels.indexOf(projectChoice) - 1];
+	if (!project) return;
+	state.activeProjectId = project.id;
+	state.activeProjectName = project.name;
+
+	const tasks = await api(`/api/tasks?project_id=${encodeURIComponent(project.id)}`);
+	const taskLabels = ["Create a new ticket", ...tasks.map((t: any) => `${t.title} [${t.status}]`)];
+	const taskChoice = await ctx.ui.select(`Which ticket in ${project.name}?`, taskLabels);
+	if (!taskChoice) return;
+	if (taskChoice === taskLabels[0]) {
+		const title = await ctx.ui.input("New ticket title", `Pi work — ${state.sessionName}`);
+		if (!title) return;
+		const taskTypeId = await findWorkTaskType(project.id);
+		const task = await api("/api/tasks", {
+			method: "POST",
+			body: JSON.stringify({
+				title,
+				project_id: project.id,
+				task_type_id: taskTypeId,
+				status: "in_execution",
+				description_md: "# Pi work\n\nRecorder summary pending.",
+				tag_names: [state.cwdTag],
+				created_by_role: "pi",
+				created_by_instance_key: "scryer-recorder",
+			}),
+		});
+		state.activeTaskId = task.id;
+		state.activeTaskTitle = task.title;
+	} else {
+		const task = tasks[taskLabels.indexOf(taskChoice) - 1];
+		if (!task) return;
+		state.activeTaskId = task.id;
+		state.activeTaskTitle = task.title;
+	}
+	await saveState();
+}
+
 async function ticketExists(ticketId: string): Promise<boolean> {
 	try {
 		await api(`/api/tasks/${ticketId}`);
@@ -324,6 +372,24 @@ async function patchTicket(ticketId: string, summary: string, endSession: boolea
 	});
 }
 
+async function patchActiveTask(summary: string) {
+	if (!state?.activeTaskId) return;
+	try {
+		await api(`/api/tasks/${state.activeTaskId}`, {
+			method: "PATCH",
+			body: JSON.stringify({
+				description_md: summary,
+				status: "in_execution",
+				tag_names: [state.cwdTag],
+			}),
+		});
+	} catch (err: any) {
+		if (!String(err?.message ?? err).includes("404")) throw err;
+		state.activeTaskId = undefined;
+		state.activeTaskTitle = undefined;
+	}
+}
+
 function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 	if (!ctx.hasUI) return;
 	if (!line) {
@@ -350,6 +416,7 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 
 		setRecorderProgress(ctx, "checking PM system…");
 		if (await ensurePm(ctx)) {
+			await chooseActiveProjectAndTask(ctx);
 			setRecorderProgress(ctx, "creating/updating Dailies ticket…");
 			let ticketId = await ensureTicket(!endSession);
 			try {
@@ -361,6 +428,10 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 				state.currentDate = undefined;
 				ticketId = await ensureTicket(false);
 				await patchTicket(ticketId, summary, endSession);
+			}
+			if (state.activeTaskId) {
+				setRecorderProgress(ctx, "updating active project ticket…");
+				await patchActiveTask(summary);
 			}
 			if (endSession) state.finalized = true;
 		} else {
