@@ -12,6 +12,7 @@ const DAILIES_SLUG = process.env.SCRYER_DAILIES_SLUG ?? "dailies";
 const OUTPUT_TOKEN_THRESHOLD = Number(process.env.SCRYER_RECORDER_OUTPUT_TOKEN_THRESHOLD ?? 50_000);
 const IDLE_MS = Number(process.env.SCRYER_RECORDER_IDLE_MS ?? 10 * 60 * 1000);
 const NEW_DAILY_HOURS = Number(process.env.SCRYER_RECORDER_NEW_DAILY_HOURS ?? 3);
+const SAVE_COOLDOWN_MS = Number(process.env.SCRYER_RECORDER_SAVE_COOLDOWN_MS ?? 30 * 60 * 1000);
 const RECORDER_DIR = join(homedir(), ".pi", "agent", "scryer-recorder");
 const STATE_DIR = join(RECORDER_DIR, "state");
 const OUTBOX_DIR = join(RECORDER_DIR, "outbox");
@@ -25,6 +26,7 @@ type RecorderState = {
 	currentDate?: string;
 	ticketId?: string;
 	lastSummaryAt?: number;
+	lastSaveAttemptAt?: number;
 	lastActivityAt?: number;
 	lastPmPromptAt?: number;
 	outputTokensSinceSummary: number;
@@ -488,11 +490,23 @@ function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSession = false) {
 	activeCtx = ctx;
 	try {
-		setRecorderProgress(ctx, `saving (${reason})…`);
 		if (!activePi) throw new Error("recorder pi api missing");
 		state ??= await loadState(activePi, ctx);
 
-		setRecorderProgress(ctx, "summarizing with active model…");
+		// Latch: if a save was attempted by any means in the last cooldown window, ignore this call.
+		// Check-and-set is synchronous, so concurrent triggers cannot both pass.
+		const sinceLastAttempt = Date.now() - (state.lastSaveAttemptAt ?? 0);
+		if (sinceLastAttempt < SAVE_COOLDOWN_MS) {
+			if (ctx.hasUI && reason === "manual-save") {
+				const mins = Math.max(1, Math.round(sinceLastAttempt / 60_000));
+				ctx.ui.notify(`Scryer recorder: save skipped — last save ${mins}m ago (cooldown ${Math.round(SAVE_COOLDOWN_MS / 60_000)}m)`, "info");
+			}
+			return;
+		}
+		state.lastSaveAttemptAt = Date.now();
+		await saveState();
+
+		setRecorderProgress(ctx, `saving (${reason}): summarizing with active model…`);
 		const summary = await generateSummary(ctx, reason, endSession);
 
 		setRecorderProgress(ctx, "writing local summary…");
