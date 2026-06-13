@@ -1,7 +1,8 @@
 import { complete } from "@mariozechner/pi-ai";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { BorderedLoader } from "@earendil-works/pi-coding-agent";
+import { DynamicBorder } from "@earendil-works/pi-coding-agent";
+import { Container, Text } from "@earendil-works/pi-tui";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -63,6 +64,7 @@ let recentUserPrompts: string[] = [];
 let scryerBusy: { label: string; startedAt: number } | undefined;
 let queuedInputs: Array<{ text: string; images?: any[] }> = [];
 let deetsTimer: NodeJS.Timeout | undefined;
+let foregroundStepUpdate: ((line: string) => void) | undefined;
 
 function today(): string {
 	return new Date().toISOString().slice(0, 10);
@@ -592,6 +594,7 @@ function updateTicketPrompt(ctx: ExtensionContext, task: any): string {
 
 async function reviseActiveTaskFromCurrentState(ctx: ExtensionContext): Promise<boolean> {
 	if (!state?.activeTaskId) return false;
+	setRecorderProgress(ctx, "reading active work ticket…");
 	const task = await getTicket(state.activeTaskId);
 	if (!task) {
 		state.activeTaskId = undefined;
@@ -600,9 +603,9 @@ async function reviseActiveTaskFromCurrentState(ctx: ExtensionContext): Promise<
 		return false;
 	}
 	state.activeTaskTitle = task.title;
-	setRecorderProgress(ctx, `revising active work ticket…`);
+	setRecorderProgress(ctx, "generating ticket update from current session…");
 	const revised = await completeText(ctx, updateTicketPrompt(ctx, task));
-	setRecorderProgress(ctx, `writing active work ticket…`);
+	setRecorderProgress(ctx, "writing active work ticket…");
 	await patchActiveTask(revised);
 	state.summary = revised;
 	state.lastSummaryAt = Date.now();
@@ -738,6 +741,7 @@ function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 		return;
 	}
 	const prefix = scryerBusy ? `BUSY — ${line}` : line;
+	foregroundStepUpdate?.(prefix);
 	ctx.ui.setStatus("scryer-recorder", prefix);
 	ctx.ui.setWidget("scryer-recorder", saveDestinationLines(prefix), { placement: "belowEditor" });
 	(ctx.ui as any).setWorkingVisible?.(true);
@@ -776,10 +780,32 @@ async function foregroundScryer(ctx: ExtensionContext, label: string, fn: () => 
 		return;
 	}
 	const result = await ctx.ui.custom<Error | null>((tui, theme, _kb, done) => {
-		const loader = new BorderedLoader(tui, theme, label);
-		loader.onAbort = () => ctx.ui.notify("Scryer operation is still running; wait for it to finish.", "warning");
-		fn().then(() => done(null)).catch((err) => done(err instanceof Error ? err : new Error(String(err))));
-		return loader;
+		let step = label;
+		let frame = 0;
+		const frames = ["·", "•", "●", "•"];
+		const timer = setInterval(() => { frame = (frame + 1) % frames.length; tui.requestRender(); }, 140);
+		foregroundStepUpdate = (line: string) => { step = line; tui.requestRender(); };
+		fn()
+			.then(() => done(null))
+			.catch((err) => done(err instanceof Error ? err : new Error(String(err))))
+			.finally(() => { clearInterval(timer); foregroundStepUpdate = undefined; });
+		return {
+			render: (w: number) => {
+				const c = new Container();
+				const borderColor = (s: string) => theme.fg("border", s);
+				c.addChild(new DynamicBorder(borderColor));
+				c.addChild(new Text(`${theme.fg("accent", frames[frame])} ${theme.bold("Scryer")}: ${label}`, 1, 0));
+				c.addChild(new Text(`  ${step}`, 1, 0));
+				for (const line of saveDestinationLines(step).slice(1)) c.addChild(new Text(theme.fg("muted", line), 1, 0));
+				if (queuedInputs.length) c.addChild(new Text(theme.fg("warning", `  Queued messages → ${queuedInputs.length}`), 1, 0));
+				c.addChild(new Text(theme.fg("dim", "  Input is held until this completes."), 1, 0));
+				c.addChild(new DynamicBorder(borderColor));
+				return c.render(w);
+			},
+			invalidate: () => {},
+			handleInput: () => { ctx.ui.notify("Scryer is working; input is held until it finishes.", "info"); },
+			dispose: () => { clearInterval(timer); foregroundStepUpdate = undefined; },
+		};
 	});
 	if (result) throw result;
 }
