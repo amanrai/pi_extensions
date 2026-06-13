@@ -2,7 +2,7 @@ import { complete } from "@mariozechner/pi-ai";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
-import { Container, SelectList, Text, type SelectItem } from "@earendil-works/pi-tui";
+import { Container, Key, matchesKey, SelectList, Text, truncateToWidth, type SelectItem } from "@earendil-works/pi-tui";
 import { DAILIES_SLUG, IDLE_MS, OUTPUT_TOKEN_THRESHOLD, OUTBOX_DIR, SAVE_COOLDOWN_MS, SUMMARIES_DIR, NEW_DAILY_HOURS, PM_URL } from "./config.ts";
 import type { RecorderState, ToolEvent } from "./types.ts";
 import { api, ensurePmReachable, findDailiesProject, findWorkTaskType, getTicket } from "./api.ts";
@@ -465,6 +465,7 @@ async function updateActiveTaskDescription(ctx: ExtensionContext) {
 			if (ctx.hasUI) ctx.ui.notify(`Updated Work → ${activeTargetLabel()}`, "info");
 		});
 	});
+	showCompletion(ctx, "update");
 }
 
 async function addActiveTaskComment(ctx: ExtensionContext) {
@@ -607,15 +608,89 @@ async function updateDailyTouchedSection(ctx: ExtensionContext, markdown: string
 	await saveState(state);
 }
 
+function groupedTouchedLines(rows: TouchLogEntry[]): string[] {
+	if (!rows.length) return ["No commits recorded for this Pi session yet."];
+	const byRepo = new Map<string, TouchLogEntry[]>();
+	for (const row of rows) {
+		const key = row.repoName || row.repoRoot;
+		byRepo.set(key, [...(byRepo.get(key) ?? []), row]);
+	}
+	const lines: string[] = [];
+	for (const [repo, commits] of byRepo) {
+		lines.push(`${repo}  ${commits.length} commit${commits.length === 1 ? "" : "s"}`);
+		for (const c of commits) lines.push(`  ● ${c.hash.slice(0, 7)} ${c.subject} · ${ago(c.timestamp)}`);
+		lines.push("");
+	}
+	return lines;
+}
+
+async function showScrollableModal(ctx: ExtensionContext, title: string, lines: string[], subtitle = "") {
+	if (!ctx.hasUI) return;
+	await ctx.ui.custom<void>((tui, theme, _kb, done) => {
+		let top = 0;
+		function pageSize() { return Math.max(8, Math.min(26, Math.floor((tui as any).height ?? 22) - 6)); }
+		function clamp() { top = Math.max(0, Math.min(top, Math.max(0, lines.length - pageSize()))); }
+		return {
+			render: (width: number) => {
+				clamp();
+				const c = new Container();
+				c.addChild(new DynamicBorder((s) => theme.fg("border", s)));
+				c.addChild(new Text(theme.fg("accent", theme.bold(title))));
+				if (subtitle) c.addChild(new Text(theme.fg("dim", subtitle)));
+				const size = pageSize();
+				for (const line of lines.slice(top, top + size)) c.addChild(new Text(truncateToWidth(line || " ", Math.max(20, width - 2))));
+				c.addChild(new Text(theme.fg("dim", `${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • esc close`)));
+				c.addChild(new DynamicBorder((s) => theme.fg("border", s)));
+				return c.render(width);
+			},
+			invalidate: () => {},
+			handleInput: (data: string) => {
+				if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl("c"))) return done(undefined);
+				if (matchesKey(data, Key.up)) top -= 1;
+				else if (matchesKey(data, Key.down)) top += 1;
+				else if (matchesKey(data, Key.pageUp)) top -= pageSize();
+				else if (matchesKey(data, Key.pageDown)) top += pageSize();
+				else if (matchesKey(data, Key.home)) top = 0;
+				else if (matchesKey(data, Key.end)) top = lines.length;
+				clamp();
+				tui.requestRender();
+			},
+		};
+	});
+}
+
 async function showTouched(ctx: ExtensionContext) {
 	state ??= activePi ? await loadState(activePi, ctx) : state;
 	const rows = await collectTouchedCommits(ctx);
 	const markdown = touchedMarkdown(rows);
-	if (ctx.hasUI) {
-		setTransientWidget(ctx, "scryer-touched", markdown.split("\n"), { placement: "belowEditor" });
-		ctx.ui.notify(`Touched commits: ${rows.length}`, "info");
-	}
 	await updateDailyTouchedSection(ctx, markdown);
+	await showScrollableModal(ctx, "Touched this session", groupedTouchedLines(rows), "Grouped by repo; Daily was updated");
+}
+
+async function showCockpit(ctx: ExtensionContext) {
+	state ??= activePi ? await loadState(activePi, ctx) : state;
+	const rows = await collectTouchedCommits(ctx);
+	const repos = new Set(rows.map((r) => r.repoName || r.repoRoot));
+	const latest = rows[0];
+	const lines = [
+		`Scryer   ${state?.activeProjectName ?? (state?.noProjectForSession ? "no project" : "pick project")}`,
+		`Ticket   ${state?.activeTaskTitle ?? (state?.noTicketForSession ? "no ticket" : "pick ticket")}`,
+		`Daily    ${dailyProjectLabel()} / ${dailyTicketLabel()}`,
+		`Update   ${ago(state?.lastUpdateAt)}     Save ${ago(state?.lastSaveAt)}`,
+		`Queue    ${pendingSave ? `save queued: ${pendingSave.reason}` : "clear"}     Input ${queuedInputs.length ? `${queuedInputs.length} queued` : "clear"}`,
+		`Repos    ${repos.size} touched     Commits ${rows.length}`,
+		latest ? `Latest   ${latest.repoName} ${latest.hash.slice(0, 7)} ${latest.subject} · ${ago(latest.timestamp)}` : "Latest   none recorded",
+		"",
+		...groupedTouchedLines(rows),
+	];
+	await showScrollableModal(ctx, "Session cockpit", lines, "Scryer context, touchlog, and queue state");
+}
+
+function showCompletion(ctx: ExtensionContext, kind: "save" | "update") {
+	const lines = kind === "update"
+		? ["✓ Ticket read", "✓ Update generated", `✓ Work ticket updated: ${activeWorkLabel()}`]
+		: ["✓ Summary generated", `✓ Daily updated: ${dailyProjectLabel()} / ${dailyTicketLabel()}`, state?.activeTaskId ? `✓ Work ticket updated: ${activeWorkLabel()}` : "○ No active work ticket", "✓ Touchlog available via /touched"];
+	setTransientWidget(ctx, "scryer-complete", [kind === "update" ? "Scryer update complete" : "Scryer save complete", ...lines], { placement: "belowEditor" });
 }
 
 function saveDestinationLines(line: string): string[] {
@@ -731,9 +806,11 @@ async function foregroundScryer(ctx: ExtensionContext, label: string, fn: () => 
 }
 
 async function runForegroundSave(reason: string, ctx: ExtensionContext, endSession = false) {
+	let saved = false;
 	await foregroundScryer(ctx, `Saving Scryer (${reason})`, async () => {
-		await summarizeAndPersist(reason, ctx, endSession);
+		saved = await summarizeAndPersist(reason, ctx, endSession);
 	});
+	if (saved) showCompletion(ctx, "save");
 }
 
 function queueSave(reason: string, ctx: ExtensionContext, endSession = false) {
@@ -759,7 +836,7 @@ async function requestSave(reason: string, ctx: ExtensionContext, endSession = f
 	await runForegroundSave(reason, ctx, endSession);
 }
 
-async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSession = false) {
+async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSession = false): Promise<boolean> {
 	activeCtx = ctx;
 	const ownsBusy = !scryerBusy;
 	if (ownsBusy) scryerBusy = { label: `saving to Scryer (${reason})`, startedAt: Date.now() };
@@ -775,7 +852,7 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 				const mins = Math.max(1, Math.round(sinceLastAttempt / 60_000));
 				ctx.ui.notify(`Scryer recorder: save skipped — last save ${mins}m ago (cooldown ${Math.round(SAVE_COOLDOWN_MS / 60_000)}m)`, "info");
 			}
-			return;
+			return false;
 		}
 		state.lastSaveAttemptAt = Date.now();
 		await saveState(state);
@@ -827,6 +904,7 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 		state.outputTokensSinceSummary = 0;
 		await saveState(state);
 		if (ctx.hasUI) ctx.ui.notify(`Scryer recorder saved summary (${reason}). ${destinationSummary()}`, "info");
+		return true;
 	} finally {
 		if (ownsBusy) {
 			scryerBusy = undefined;
@@ -967,6 +1045,19 @@ export default function (pi: ExtensionAPI) {
 	register("ac", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 	register("add-comments", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 	register("touched", "Show commits touched this session and update Daily", showTouched);
+
+	pi.registerCommand("cockpit", {
+		description: "Open Scryer session cockpit",
+		handler: async (_args, ctx) => {
+			try {
+				activeCtx = ctx;
+				state ??= await loadState(pi, ctx);
+				await showCockpit(ctx);
+			} catch (err: any) {
+				if (ctx.hasUI) ctx.ui.notify(`Scryer cockpit failed: ${err?.message ?? err}`, "error");
+			}
+		},
+	});
 
 	pi.registerCommand("deets", {
 		description: "Show current Scryer project/ticket/save context",
