@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import { Container, Key, matchesKey, SelectList, Text, truncateToWidth, type SelectItem } from "@earendil-works/pi-tui";
 import { readdir, readFile, stat } from "node:fs/promises";
+import { overlayStyle } from "./overlay-style.ts";
 import { homedir } from "node:os";
 import { basename, relative, resolve } from "node:path";
 
@@ -107,17 +108,17 @@ async function showMarkdown(ctx: ExtensionContext, file: string) {
 		return {
 			render: (width: number) => {
 				clamp();
-				const bodyWidth = Math.max(20, width - 4);
+				const bodyWidth = Math.max(20, width - 2);
 				const c = new Container();
-				c.addChild(new DynamicBorder((s) => theme.fg("border", s)));
-				c.addChild(new Text(theme.fg("accent", theme.bold(` ${basename(doc.path)} `)) + theme.fg("dim", relative(ctx.cwd, doc.path))));
-				if (doc.truncated) c.addChild(new Text(theme.fg("warning", ` truncated at ${Math.round(MAX_FILE_BYTES / 1024)}KB`)));
+				c.addChild(new Text(overlayStyle.border(bodyWidth)));
+				c.addChild(new Text(overlayStyle.title(`${basename(doc.path)}  ${relative(ctx.cwd, doc.path)}`, bodyWidth)));
+				if (doc.truncated) c.addChild(new Text(overlayStyle.muted(`truncated at ${Math.round(MAX_FILE_BYTES / 1024)}KB`, bodyWidth)));
 				const size = pageSize();
 				for (const line of lines.slice(top, top + size)) {
-					c.addChild(new Text(truncateToWidth(renderMarkdownLine(line || " ", theme), bodyWidth)));
+					c.addChild(new Text(overlayStyle.line(truncateToWidth(renderMarkdownLine(line || " ", theme), bodyWidth), bodyWidth)));
 				}
-				c.addChild(new Text(theme.fg("dim", ` ${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • pageUp/pageDown • esc close`)));
-				c.addChild(new DynamicBorder((s) => theme.fg("border", s)));
+				c.addChild(new Text(overlayStyle.muted(`${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • pageUp/pageDown • esc close`, bodyWidth)));
+				c.addChild(new Text(overlayStyle.border(bodyWidth)));
 				return c.render(width);
 			},
 			invalidate: () => {},

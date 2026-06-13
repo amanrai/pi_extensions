@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appendTouchlogEntry, readTouchlog, type TouchLogEntry } from "./touchlog.ts";
+import { overlayStyle } from "../overlay-style.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -633,13 +634,14 @@ async function showScrollableModal(ctx: ExtensionContext, title: string, lines: 
 			render: (width: number) => {
 				clamp();
 				const c = new Container();
-				c.addChild(new DynamicBorder((s) => theme.fg("border", s)));
-				c.addChild(new Text(theme.fg("accent", theme.bold(title))));
-				if (subtitle) c.addChild(new Text(theme.fg("dim", subtitle)));
+				const panelWidth = Math.max(20, width - 2);
+				c.addChild(new Text(overlayStyle.border(panelWidth)));
+				c.addChild(new Text(overlayStyle.title(title, panelWidth)));
+				if (subtitle) c.addChild(new Text(overlayStyle.muted(subtitle, panelWidth)));
 				const size = pageSize();
-				for (const line of lines.slice(top, top + size)) c.addChild(new Text(truncateToWidth(line || " ", Math.max(20, width - 2))));
-				c.addChild(new Text(theme.fg("dim", `${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • esc close`)));
-				c.addChild(new DynamicBorder((s) => theme.fg("border", s)));
+				for (const line of lines.slice(top, top + size)) c.addChild(new Text(overlayStyle.line(truncateToWidth(line || " ", panelWidth), panelWidth)));
+				c.addChild(new Text(overlayStyle.muted(`${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • esc close`, panelWidth)));
+				c.addChild(new Text(overlayStyle.border(panelWidth)));
 				return c.render(width);
 			},
 			invalidate: () => {},
