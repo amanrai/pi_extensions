@@ -17,6 +17,7 @@ import { readScryerState } from "./scryer/state.ts";
 import type { RecorderState } from "./scryer/types.ts";
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -42,7 +43,7 @@ function formatPwd(cwd: string): string {
 // ── Data fetching ────────────────────────────────────────────────────────────
 
 interface PRInfo { number: number; url: string; }
-interface CommitInfo { subject: string; timestamp: number; hash: string; }
+interface CommitInfo { subject: string; timestamp: number; hash: string; repoName: string; repoRoot: string; }
 
 function ago(ts?: number): string | null {
   if (!ts) return null;
@@ -134,16 +135,25 @@ async function fetchPR(cwd: string): Promise<PRInfo | null> {
   } catch { return null; }
 }
 
+async function gitRoot(cwd: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd, timeout: 3000 });
+    return stdout.trim() || null;
+  } catch { return null; }
+}
+
 async function fetchLastCommit(cwd: string): Promise<CommitInfo | null> {
   try {
+    const root = await gitRoot(cwd);
+    if (!root) return null;
     const { stdout } = await execFileAsync(
       "git",
       ["log", "-1", "--format=%H%x00%ct%x00%s"],
-      { cwd, timeout: 3000 },
+      { cwd: root, timeout: 3000 },
     );
     const [hash, ts, subject] = stdout.trim().split("\x00");
     if (!hash || !ts || !subject) return null;
-    return { hash, timestamp: Number(ts) * 1000, subject };
+    return { hash, timestamp: Number(ts) * 1000, subject, repoName: basename(root), repoRoot: root };
   } catch { return null; }
 }
 
@@ -151,7 +161,7 @@ function formatCommitLine(commit: CommitInfo | null): string | null {
   if (!commit) return null;
   const when = ago(commit.timestamp);
   const short = commit.hash.slice(0, 7);
-  return dim(`↳ ${short} ${commit.subject}${when ? ` · ${when}` : ""}`);
+  return dim(`↳ ${commit.repoName} ${short} ${commit.subject}${when ? ` · ${when}` : ""}`);
 }
 
 // ── Extension ────────────────────────────────────────────────────────────────
@@ -160,6 +170,7 @@ export default function (pi: ExtensionAPI) {
   let starshipPrompt: string | null = null;
   let pr: PRInfo | null             = null;
   let lastCommit: CommitInfo | null = null;
+  let activeRepoRoot: string | null  = null;
   let scryerContext: string | null  = null;
   let thinkingLevel: string         = "off";
   let lastRenderWidth               = 120;
@@ -179,14 +190,35 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
+  async function refreshCommit(ctx: ExtensionContext) {
+    lastCommit = await fetchLastCommit(activeRepoRoot ?? ctx.cwd);
+    requestRender?.();
+  }
+
   async function refreshAll(ctx: ExtensionContext) {
-    [pr, lastCommit] = await Promise.all([
+    [pr] = await Promise.all([
       fetchPR(ctx.cwd),
-      fetchLastCommit(ctx.cwd),
+      refreshCommit(ctx).then(() => null),
       refreshStarship(ctx.cwd, lastRenderWidth).then(() => null),
       refreshScryer(ctx).then(() => null),
     ]);
     requestRender?.();
+  }
+
+  async function considerActivePath(ctx: ExtensionContext, rawPath: unknown) {
+    if (typeof rawPath !== "string" || !rawPath.trim()) return;
+    const expanded = rawPath.startsWith("~/") ? resolve(homedir(), rawPath.slice(2)) : rawPath;
+    const abs = isAbsolute(expanded) ? expanded : resolve(ctx.cwd, expanded);
+    const root = await gitRoot(abs).catch(() => null) ?? await gitRoot(dirname(abs)).catch(() => null);
+    if (!root || root === activeRepoRoot) return;
+    activeRepoRoot = root;
+    await refreshCommit(ctx);
+  }
+
+  async function considerToolPaths(ctx: ExtensionContext, toolName: string, input: any) {
+    if (!input || typeof input !== "object") return;
+    if (["read", "write"].includes(toolName)) await considerActivePath(ctx, input.path);
+    if (toolName === "edit") await considerActivePath(ctx, input.path);
   }
 
   pi.on("session_start", async (_event, ctx) => {
@@ -271,6 +303,10 @@ export default function (pi: ExtensionAPI) {
         },
       };
     });
+  });
+
+  pi.on("tool_call", async (event, ctx) => {
+    await considerToolPaths(ctx, event.toolName, event.input as any);
   });
 
   pi.on("agent_end", (_event, ctx) => {
