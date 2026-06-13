@@ -2,7 +2,7 @@ import { complete } from "@mariozechner/pi-ai";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
-import { Container, Text } from "@earendil-works/pi-tui";
+import { Container, SelectList, Text, type SelectItem } from "@earendil-works/pi-tui";
 import { DAILIES_SLUG, IDLE_MS, OUTPUT_TOKEN_THRESHOLD, OUTBOX_DIR, SAVE_COOLDOWN_MS, SUMMARIES_DIR, NEW_DAILY_HOURS, PM_URL } from "./config.ts";
 import type { RecorderState, ToolEvent } from "./types.ts";
 import { api, ensurePmReachable, findDailiesProject, findWorkTaskType, getTicket } from "./api.ts";
@@ -22,6 +22,56 @@ let scryerBusy: { label: string; startedAt: number } | undefined;
 let queuedInputs: Array<{ text: string; images?: any[] }> = [];
 let deetsTimer: NodeJS.Timeout | undefined;
 let foregroundStepUpdate: ((line: string) => void) | undefined;
+let pendingSave: { reason: string; ctx: ExtensionContext; endSession: boolean } | undefined;
+
+type PickerItem = SelectItem & { value: string };
+
+async function pickFromList(ctx: ExtensionContext, title: string, subtitle: string, items: PickerItem[], height = 12): Promise<string | undefined> {
+	if (!items.length) return undefined;
+	return ctx.ui.custom<string | undefined>((tui, theme, _kb, done) => {
+		const container = new Container();
+		container.addChild(new DynamicBorder((s) => theme.fg("border", s)));
+		container.addChild(new Text(theme.fg("accent", theme.bold(title))));
+		if (subtitle) container.addChild(new Text(theme.fg("dim", subtitle)));
+		const list = new SelectList(items, Math.min(height, Math.max(5, items.length)), {
+			selectedPrefix: (s) => theme.fg("accent", s),
+			selectedText: (s) => theme.fg("accent", s),
+			description: (s) => theme.fg("muted", s),
+			scrollInfo: (s) => theme.fg("dim", s),
+			noMatch: (s) => theme.fg("warning", s),
+		});
+		list.onSelect = (item) => done(String(item.value));
+		list.onCancel = () => done(undefined);
+		container.addChild(list);
+		container.addChild(new Text(theme.fg("dim", "↑↓ navigate • type to filter • enter select • esc cancel")));
+		container.addChild(new DynamicBorder((s) => theme.fg("border", s)));
+		return {
+			render: (width: number) => container.render(width),
+			invalidate: () => container.invalidate(),
+			handleInput: (data: string) => { list.handleInput(data); tui.requestRender(); },
+		};
+	});
+}
+
+function repoDescription(project: any, score?: number): string {
+	const bits: string[] = [];
+	if (score) bits.push(`match ${score}`);
+	if (project.remote_repo_url) bits.push(project.remote_repo_url);
+	else if (project.relative_repo_path) bits.push(project.relative_repo_path);
+	if (project.description_md) bits.push(String(project.description_md).replace(/\s+/g, " ").slice(0, 90));
+	return bits.join(" · ");
+}
+
+function taskDescription(task: any): string {
+	const parts = [String(task.status ?? "unknown")];
+	const updated = ago(Date.parse(task.updated_at));
+	if (updated !== "never") parts.push(`updated ${updated}`);
+	const tags = (task.tags ?? []).map((t: any) => t.name).filter(Boolean).slice(0, 4).join(", ");
+	if (tags) parts.push(tags);
+	const desc = String(task.description_md ?? "").replace(/[#*_`>\-\n\r]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 90);
+	if (desc) parts.push(desc);
+	return parts.join(" · ");
+}
 
 async function pickActiveProject(ctx: ExtensionContext): Promise<boolean> {
 	if (!state || !ctx.hasUI) return false;
@@ -33,19 +83,23 @@ async function pickActiveProject(ctx: ExtensionContext): Promise<boolean> {
 		.sort((a: any, b: any) => b.score - a.score || String(a.project.name).localeCompare(String(b.project.name)));
 	const obvious = scored.filter((x: any) => x.score > 0).slice(0, 8);
 	const other = scored.filter((x: any) => !obvious.some((o: any) => o.project.id === x.project.id));
-	const obviousLabels = obvious.map((x: any) => projectLabel(x.project, x.score));
-	const choices = [
-		...obviousLabels,
-		"Other project…",
-		"Continue without a project for this session",
-	];
 	const title = repo.remote
-		? `Project for ${displayPath(repo.root)} (${repo.remote})`
+		? `Project for ${displayPath(repo.root)}`
 		: `Project for ${displayPath(repo.root)}`;
-	let choice = await ctx.ui.select(title, choices);
+	const subtitle = repo.remote ? `repo remote: ${repo.remote}` : "repo-aware suggestions first";
+	const obviousItems: PickerItem[] = [
+		...obvious.map((x: any) => ({
+			value: `project:${x.project.id}`,
+			label: projectLabel(x.project, x.score),
+			description: repoDescription(x.project, x.score),
+		})),
+		{ value: "other", label: "Other project…", description: `${other.length} remaining projects` },
+		{ value: "none", label: "Continue without a project for this session", description: "Daily saves fall back to Dailies project" },
+	];
+	let choice = await pickFromList(ctx, title, subtitle, obviousItems, 12);
 	if (!choice) return false;
 	let project: any | undefined;
-	if (choice === "Continue without a project for this session") {
+	if (choice === "none") {
 		state.activeProjectId = undefined;
 		state.activeProjectName = undefined;
 		state.activeTaskId = undefined;
@@ -56,14 +110,20 @@ async function pickActiveProject(ctx: ExtensionContext): Promise<boolean> {
 		ctx.ui.notify("Scryer recorder: continuing without a project for this session", "info");
 		return false;
 	}
-	if (choice === "Other project…") {
-		const otherLabels = other.map((x: any) => projectLabel(x.project));
-		choice = await ctx.ui.select("Other Scryer project", ["Cancel", ...otherLabels]);
-		if (!choice || choice === "Cancel") return false;
-		project = other[otherLabels.indexOf(choice)]?.project;
-	} else {
-		project = obvious[obviousLabels.indexOf(choice)]?.project;
+	if (choice === "other") {
+		const otherItems: PickerItem[] = [
+			{ value: "cancel", label: "Cancel", description: "Return without changing project" },
+			...other.map((x: any) => ({
+				value: `project:${x.project.id}`,
+				label: `${x.project.name} (${x.project.slug})`,
+				description: repoDescription(x.project),
+			})),
+		];
+		choice = await pickFromList(ctx, "Other Scryer project", "type to filter projects", otherItems, 16);
+		if (!choice || choice === "cancel") return false;
 	}
+	const projectId = choice.startsWith("project:") ? choice.slice("project:".length) : undefined;
+	project = scored.find((x: any) => x.project.id === projectId)?.project;
 	if (!project) return false;
 	state.activeProjectId = project.id;
 	state.activeProjectName = project.name;
@@ -95,16 +155,20 @@ async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 		.sort((a: any, b: any) => taskRank(a) - taskRank(b) || String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
 	const openTasks = tasks.filter((t: any) => t.status !== "human_reviewed_and_closed");
 	const closedTasks = tasks.filter((t: any) => t.status === "human_reviewed_and_closed");
-	const shown = openTasks.slice(0, 30);
-	const taskLabels = shown.map((t: any) => `${t.title} [${t.status}]`);
-	const taskChoice = await ctx.ui.select(`Ticket in ${state.activeProjectName ?? "project"}?`, [
-		"Create a new ticket",
-		"Continue without a ticket for this session",
-		...taskLabels,
-		...(closedTasks.length ? ["Closed tickets…"] : []),
-	]);
+	const shown = openTasks.slice(0, 40);
+	const ticketItems: PickerItem[] = [
+		{ value: "create", label: "Create a new ticket", description: `in ${state.activeProjectName ?? "project"}` },
+		{ value: "none", label: "Continue without a ticket for this session", description: "Daily still saves to selected project" },
+		...shown.map((t: any) => ({
+			value: `task:${t.id}`,
+			label: t.title,
+			description: taskDescription(t),
+		})),
+		...(closedTasks.length ? [{ value: "closed", label: "Closed tickets…", description: `${closedTasks.length} closed tickets` }] : []),
+	];
+	let taskChoice = await pickFromList(ctx, `Ticket in ${state.activeProjectName ?? "project"}`, "type to filter tickets", ticketItems, 16);
 	if (!taskChoice) return false;
-	if (taskChoice === "Continue without a ticket for this session") {
+	if (taskChoice === "none") {
 		state.activeTaskId = undefined;
 		state.activeTaskTitle = undefined;
 		state.noTicketForSession = true;
@@ -112,7 +176,7 @@ async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 		ctx.ui.notify(`Scryer recorder: ${state.activeProjectName}, no active ticket`, "info");
 		return false;
 	}
-	if (taskChoice === "Create a new ticket") {
+	if (taskChoice === "create") {
 		const title = await ctx.ui.input("New ticket title", `Pi work — ${state.sessionName}`);
 		if (!title) return false;
 		const taskTypeId = await findWorkTaskType(state.activeProjectId);
@@ -131,16 +195,25 @@ async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 		});
 		state.activeTaskId = task.id;
 		state.activeTaskTitle = task.title;
-	} else if (taskChoice === "Closed tickets…") {
-		const closedLabels = closedTasks.slice(0, 50).map((t: any) => `${t.title} [${t.status}]`);
-		const closedChoice = await ctx.ui.select("Closed ticket", ["Cancel", ...closedLabels]);
-		if (!closedChoice || closedChoice === "Cancel") return false;
-		const task = closedTasks[closedLabels.indexOf(closedChoice)];
+	} else if (taskChoice === "closed") {
+		const closedItems: PickerItem[] = [
+			{ value: "cancel", label: "Cancel", description: "Return without changing ticket" },
+			...closedTasks.slice(0, 80).map((t: any) => ({
+				value: `task:${t.id}`,
+				label: t.title,
+				description: taskDescription(t),
+			})),
+		];
+		taskChoice = await pickFromList(ctx, "Closed ticket", "type to filter closed tickets", closedItems, 16);
+		if (!taskChoice || taskChoice === "cancel") return false;
+		const taskId = taskChoice.startsWith("task:") ? taskChoice.slice("task:".length) : undefined;
+		const task = closedTasks.find((t: any) => t.id === taskId);
 		if (!task) return false;
 		state.activeTaskId = task.id;
 		state.activeTaskTitle = task.title;
 	} else {
-		const task = shown[taskLabels.indexOf(taskChoice)];
+		const taskId = taskChoice.startsWith("task:") ? taskChoice.slice("task:".length) : undefined;
+		const task = shown.find((t: any) => t.id === taskId);
 		if (!task) return false;
 		state.activeTaskId = task.id;
 		state.activeTaskTitle = task.title;
@@ -518,6 +591,35 @@ async function foregroundScryer(ctx: ExtensionContext, label: string, fn: () => 
 	if (result) throw result;
 }
 
+async function runForegroundSave(reason: string, ctx: ExtensionContext, endSession = false) {
+	await foregroundScryer(ctx, `Saving Scryer (${reason})`, async () => {
+		await summarizeAndPersist(reason, ctx, endSession);
+	});
+}
+
+function queueSave(reason: string, ctx: ExtensionContext, endSession = false) {
+	pendingSave = { reason, ctx, endSession };
+	if (ctx.hasUI) ctx.ui.notify(`Scryer save queued: ${reason}`, "info");
+}
+
+async function flushPendingSave(ctx?: ExtensionContext) {
+	if (!pendingSave || scryerBusy) return;
+	const save = pendingSave;
+	const runCtx = ctx ?? save.ctx;
+	if (runCtx.isIdle && !runCtx.isIdle()) return;
+	pendingSave = undefined;
+	await runForegroundSave(save.reason, runCtx, save.endSession);
+}
+
+async function requestSave(reason: string, ctx: ExtensionContext, endSession = false, force = false) {
+	activeCtx = ctx;
+	if (!force && ((ctx.isIdle && !ctx.isIdle()) || scryerBusy)) {
+		queueSave(reason, ctx, endSession);
+		return;
+	}
+	await runForegroundSave(reason, ctx, endSession);
+}
+
 async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSession = false) {
 	activeCtx = ctx;
 	const ownsBusy = !scryerBusy;
@@ -600,7 +702,7 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 function scheduleIdle(ctx: ExtensionContext) {
 	if (idleTimer) clearTimeout(idleTimer);
 	idleTimer = setTimeout(() => {
-		if (activeCtx) summarizeAndPersist("idle", activeCtx, true).catch(() => undefined);
+		if (activeCtx) requestSave("idle", activeCtx, true, false).catch(() => undefined);
 	}, IDLE_MS);
 }
 
@@ -667,7 +769,7 @@ export default function (pi: ExtensionAPI) {
 		state.lastActivityAt = Date.now();
 		await saveState(state);
 		if (state.outputTokensSinceSummary >= OUTPUT_TOKEN_THRESHOLD) {
-			await summarizeAndPersist("output-token-threshold", ctx, false);
+			await requestSave("output-token-threshold", ctx, false, false);
 		}
 	});
 
@@ -676,6 +778,7 @@ export default function (pi: ExtensionAPI) {
 		state ??= await loadState(pi, ctx);
 		state.lastActivityAt = Date.now();
 		await saveState(state);
+		await flushPendingSave(ctx);
 		scheduleIdle(ctx);
 	});
 
@@ -756,9 +859,7 @@ export default function (pi: ExtensionAPI) {
 			try {
 				activeCtx = ctx;
 				state ??= await loadState(pi, ctx);
-				await foregroundScryer(ctx, "Saving Scryer Daily / active ticket", async () => {
-					await summarizeAndPersist("manual-save", ctx, false);
-				});
+				await requestSave("manual-save", ctx, false, true);
 			} catch (err: any) {
 				if (ctx.hasUI) ctx.ui.notify(`Scryer recorder save failed: ${err?.message ?? err}`, "error");
 			}
