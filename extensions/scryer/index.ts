@@ -28,6 +28,8 @@ let scryerBusy: { label: string; startedAt: number } | undefined;
 let queuedInputs: Array<{ text: string; images?: any[] }> = [];
 let deetsTimer: NodeJS.Timeout | undefined;
 let foregroundStepUpdate: ((line: string) => void) | undefined;
+let foregroundPlan: Array<{ label: string; match: RegExp }> = [];
+let foregroundStepIndex = 0;
 let pendingSave: { reason: string; ctx: ExtensionContext; endSession: boolean } | undefined;
 const widgetTimers = new Map<string, NodeJS.Timeout>();
 
@@ -635,6 +637,8 @@ function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 		return;
 	}
 	const prefix = scryerBusy ? `BUSY — ${line}` : line;
+	const idx = foregroundPlan.findIndex((step) => step.match.test(line));
+	if (idx >= 0) foregroundStepIndex = idx;
 	foregroundStepUpdate?.(prefix);
 	ctx.ui.setStatus("scryer-recorder", prefix);
 	if (!foregroundStepUpdate) setTransientWidget(ctx, "scryer-recorder", saveDestinationLines(prefix), { placement: "belowEditor" });
@@ -668,6 +672,22 @@ async function withScryerBusy(ctx: ExtensionContext, label: string, fn: () => Pr
 	}
 }
 
+function planForScryer(label: string) {
+	if (/updat/i.test(label)) return [
+		{ label: "Read active ticket", match: /reading active work ticket/i },
+		{ label: "Generate ticket update", match: /generating ticket update|revising active work ticket/i },
+		{ label: "Write active ticket", match: /writing active work ticket|updating active/i },
+	];
+	return [
+		{ label: "Check destination", match: /checking Scryer destination/i },
+		{ label: "Generate summary", match: /summarizing with active model/i },
+		{ label: "Write local summary", match: /writing local summary/i },
+		{ label: "Create/update Daily", match: /creating\/updating daily|daily ticket missing/i },
+		{ label: "Write Daily", match: /writing daily ticket/i },
+		{ label: "Update work ticket", match: /updating active work ticket/i },
+	];
+}
+
 async function foregroundScryer(ctx: ExtensionContext, label: string, fn: () => Promise<void>) {
 	if (!ctx.hasUI || ctx.mode !== "tui") {
 		await fn();
@@ -676,20 +696,27 @@ async function foregroundScryer(ctx: ExtensionContext, label: string, fn: () => 
 	const result = await ctx.ui.custom<Error | null>((tui, theme, _kb, done) => {
 		let step = label;
 		let frame = 0;
+		foregroundPlan = planForScryer(label);
+		foregroundStepIndex = 0;
 		const frames = ["·", "•", "●", "•"];
 		const timer = setInterval(() => { frame = (frame + 1) % frames.length; tui.requestRender(); }, 140);
 		foregroundStepUpdate = (line: string) => { step = line; tui.requestRender(); };
 		fn()
 			.then(() => done(null))
 			.catch((err) => done(err instanceof Error ? err : new Error(String(err))))
-			.finally(() => { clearInterval(timer); foregroundStepUpdate = undefined; });
+			.finally(() => { clearInterval(timer); foregroundStepUpdate = undefined; foregroundPlan = []; foregroundStepIndex = 0; });
 		return {
 			render: (w: number) => {
 				const c = new Container();
 				const borderColor = (s: string) => theme.fg("border", s);
 				c.addChild(new DynamicBorder(borderColor));
 				c.addChild(new Text(`${theme.fg("accent", frames[frame])} ${theme.bold("Scryer")}: ${label}`, 1, 0));
-				c.addChild(new Text(`  ${step}`, 1, 0));
+				foregroundPlan.forEach((planned, i) => {
+					const marker = i < foregroundStepIndex ? theme.fg("muted", "✓") : i === foregroundStepIndex ? theme.fg("accent", "●") : theme.fg("dim", "○");
+					const text = i === foregroundStepIndex ? theme.fg("accent", planned.label) : i < foregroundStepIndex ? theme.fg("muted", planned.label) : theme.fg("dim", planned.label);
+					c.addChild(new Text(`  ${marker} ${text}`, 1, 0));
+				});
+				c.addChild(new Text(theme.fg("dim", `  current: ${step}`), 1, 0));
 				for (const line of saveDestinationLines(step).slice(1)) c.addChild(new Text(theme.fg("muted", line), 1, 0));
 				if (queuedInputs.length) c.addChild(new Text(theme.fg("warning", `  Queued messages → ${queuedInputs.length}`), 1, 0));
 				c.addChild(new DynamicBorder(borderColor));
@@ -697,7 +724,7 @@ async function foregroundScryer(ctx: ExtensionContext, label: string, fn: () => 
 			},
 			invalidate: () => {},
 			handleInput: () => { ctx.ui.notify("Scryer is working; input is held until it finishes.", "info"); },
-			dispose: () => { clearInterval(timer); foregroundStepUpdate = undefined; },
+			dispose: () => { clearInterval(timer); foregroundStepUpdate = undefined; foregroundPlan = []; foregroundStepIndex = 0; },
 		};
 	});
 	if (result) throw result;
