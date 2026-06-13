@@ -29,6 +29,9 @@ type RecorderState = {
 	ticketProjectName?: string;
 	ticketTitle?: string;
 	lastSummaryAt?: number;
+	lastSaveAt?: number;
+	lastUpdateAt?: number;
+	lastSaveReason?: string;
 	lastSaveAttemptAt?: number;
 	lastActivityAt?: number;
 	lastPmPromptAt?: number;
@@ -56,6 +59,8 @@ let activeCtx: ExtensionContext | undefined;
 let activePi: ExtensionAPI | undefined;
 let recentTools: ToolEvent[] = [];
 let recentUserPrompts: string[] = [];
+let scryerBusy: { label: string; startedAt: number } | undefined;
+let queuedInputs: Array<{ text: string; images?: any[] }> = [];
 
 function today(): string {
 	return new Date().toISOString().slice(0, 10);
@@ -488,16 +493,20 @@ function summaryPrompt(ctx: ExtensionContext, reason: string, endSession: boolea
 	].join("\n");
 }
 
-async function generateSummary(ctx: ExtensionContext, reason: string, endSession: boolean): Promise<string> {
+async function completeText(ctx: ExtensionContext, prompt: string): Promise<string> {
 	if (!ctx.model) throw new Error("No active model");
 	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
 	if (!auth.ok || !auth.apiKey) throw new Error(auth.ok ? `No API key for ${ctx.model.provider}` : auth.error);
 	const response = await complete(
 		ctx.model,
-		{ messages: [{ role: "user", content: [{ type: "text", text: summaryPrompt(ctx, reason, endSession) }], timestamp: Date.now() }] },
+		{ messages: [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }] },
 		{ apiKey: auth.apiKey, headers: auth.headers, reasoningEffort: "medium" },
 	);
 	return response.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n").trim();
+}
+
+async function generateSummary(ctx: ExtensionContext, reason: string, endSession: boolean): Promise<string> {
+	return completeText(ctx, summaryPrompt(ctx, reason, endSession));
 }
 
 async function writeOutbox(reason: string, summary: string, endSession: boolean) {
@@ -541,7 +550,7 @@ async function patchTicket(ticketId: string, summary: string, endSession: boolea
 async function patchActiveTask(summary: string) {
 	if (!state?.activeTaskId) return;
 	try {
-		await api(`/api/tasks/${state.activeTaskId}`, {
+		const task = await api(`/api/tasks/${state.activeTaskId}`, {
 			method: "PATCH",
 			body: JSON.stringify({
 				description_md: summary,
@@ -549,11 +558,55 @@ async function patchActiveTask(summary: string) {
 				tag_names: [state.cwdTag],
 			}),
 		});
+		state.activeTaskTitle = task?.title ?? state.activeTaskTitle;
 	} catch (err: any) {
 		if (!String(err?.message ?? err).includes("404")) throw err;
 		state.activeTaskId = undefined;
 		state.activeTaskTitle = undefined;
 	}
+}
+
+function updateTicketPrompt(ctx: ExtensionContext, task: any): string {
+	return [
+		"Revise the existing Scryer ticket description to reflect the current Pi session state.",
+		"Do not produce a separate status report. Return ONLY the full replacement markdown for the ticket description.",
+		"Preserve useful existing structure and decisions. Merge in new facts, current state, files touched, and next steps.",
+		"Remove stale claims only when contradicted by the session.",
+		`Ticket: ${task.title} [${task.status}]`,
+		"",
+		"Existing ticket description:",
+		String(task.description_md ?? ""),
+		"",
+		"Recent user prompts:",
+		...recentUserPrompts.slice(-12).map((p) => `- ${p.replace(/\s+/g, " ").slice(0, 300)}`),
+		"",
+		"Recent tool activity:",
+		...(recentTools.slice(-40).map((t) => `- ${t.name}: ${t.ok === false ? "failed" : "used"}${t.error ? ` (${t.error})` : ""}`) || ["- none recorded"]),
+		"",
+		"Recent conversation:",
+		buildConversationText(ctx),
+	].join("\n");
+}
+
+async function reviseActiveTaskFromCurrentState(ctx: ExtensionContext): Promise<boolean> {
+	if (!state?.activeTaskId) return false;
+	const task = await getTicket(state.activeTaskId);
+	if (!task) {
+		state.activeTaskId = undefined;
+		state.activeTaskTitle = undefined;
+		await saveState();
+		return false;
+	}
+	state.activeTaskTitle = task.title;
+	setRecorderProgress(ctx, `revising active work ticket…`);
+	const revised = await completeText(ctx, updateTicketPrompt(ctx, task));
+	setRecorderProgress(ctx, `writing active work ticket…`);
+	await patchActiveTask(revised);
+	state.summary = revised;
+	state.lastSummaryAt = Date.now();
+	state.lastUpdateAt = Date.now();
+	await saveState();
+	return true;
 }
 
 async function commentOnActiveTask(summary: string) {
@@ -597,15 +650,11 @@ function activeTargetLabel(): string {
 
 async function updateActiveTaskDescription(ctx: ExtensionContext) {
 	if (!state || !(await ensureActiveTicketSelected(ctx))) return;
-	setRecorderProgress(ctx, "summarizing for active ticket description…");
-	const summary = await generateSummary(ctx, "update-ticket", false);
-	await writeLocalSummary("update-ticket", summary, false);
-	setRecorderProgress(ctx, `updating ${activeTargetLabel()}…`);
-	await patchActiveTask(summary);
-	state.summary = summary;
-	state.lastSummaryAt = Date.now();
-	await saveState();
-	if (ctx.hasUI) ctx.ui.notify(`Updated ticket: ${activeTargetLabel()}`, "info");
+	await withScryerBusy(ctx, `updating ${activeTargetLabel()}…`, async () => {
+		const ok = await reviseActiveTaskFromCurrentState(ctx);
+		if (!ok) throw new Error("active ticket no longer exists");
+		if (ctx.hasUI) ctx.ui.notify(`Updated Work → ${activeTargetLabel()}`, "info");
+	});
 }
 
 async function addActiveTaskComment(ctx: ExtensionContext) {
@@ -640,6 +689,32 @@ function destinationSummary(): string {
 	return `Daily → ${dailyProjectLabel()} / ${dailyTicketLabel()} · Work → ${activeWorkLabel()}`;
 }
 
+function ago(ts?: number): string {
+	if (!ts) return "never";
+	const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+	if (seconds < 60) return `${seconds}s ago`;
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}m ago`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 48) return `${hours}h ${minutes % 60}m ago`;
+	const days = Math.floor(hours / 24);
+	return `${days}d ago`;
+}
+
+function deetsLines(): string[] {
+	return [
+		"# Scryer context",
+		`Project: ${state?.activeProjectName ?? (state?.noProjectForSession ? "none — consciously skipped" : "none selected")}`,
+		`Ticket: ${state?.activeTaskTitle ?? (state?.noTicketForSession ? "none — consciously skipped" : "none selected")}`,
+		`Daily: ${dailyProjectLabel()} / ${dailyTicketLabel()}`,
+		`Last save: ${ago(state?.lastSaveAt)}${state?.lastSaveReason ? ` (${state.lastSaveReason})` : ""}`,
+		`Last update: ${ago(state?.lastUpdateAt)}`,
+		`Last autosave/activity: ${ago(state?.lastActivityAt)}`,
+		`Cooldown: ${Math.round(SAVE_COOLDOWN_MS / 60_000)}m; last attempt ${ago(state?.lastSaveAttemptAt)}`,
+		`CWD: ${state?.cwd ?? "unknown"}`,
+	];
+}
+
 function saveDestinationLines(line: string): string[] {
 	return [
 		`▸ Scryer recorder: ${line}`,
@@ -655,12 +730,40 @@ function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 		ctx.ui.setWidget("scryer-recorder", undefined);
 		return;
 	}
-	ctx.ui.setStatus("scryer-recorder", line);
-	ctx.ui.setWidget("scryer-recorder", saveDestinationLines(line), { placement: "belowEditor" });
+	const prefix = scryerBusy ? `BUSY — ${line}` : line;
+	ctx.ui.setStatus("scryer-recorder", prefix);
+	ctx.ui.setWidget("scryer-recorder", saveDestinationLines(prefix), { placement: "belowEditor" });
+}
+
+async function flushQueuedInputs() {
+	if (!activePi || queuedInputs.length === 0) return;
+	const pending = queuedInputs;
+	queuedInputs = [];
+	for (const item of pending) {
+		activePi.sendUserMessage(item.images?.length ? [{ type: "text", text: item.text }, ...item.images] as any : item.text, { deliverAs: "followUp" });
+	}
+}
+
+async function withScryerBusy(ctx: ExtensionContext, label: string, fn: () => Promise<void>) {
+	if (scryerBusy) {
+		if (ctx.hasUI) ctx.ui.notify(`Scryer is already busy: ${scryerBusy.label}`, "warning");
+		return;
+	}
+	scryerBusy = { label, startedAt: Date.now() };
+	setRecorderProgress(ctx, label);
+	try {
+		await fn();
+	} finally {
+		scryerBusy = undefined;
+		setRecorderProgress(ctx, undefined);
+		await flushQueuedInputs();
+	}
 }
 
 async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSession = false) {
 	activeCtx = ctx;
+	const ownsBusy = !scryerBusy;
+	if (ownsBusy) scryerBusy = { label: `saving to Scryer (${reason})`, startedAt: Date.now() };
 	try {
 		if (!activePi) throw new Error("recorder pi api missing");
 		state ??= await loadState(activePi, ctx);
@@ -719,12 +822,20 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 		}
 		state.summary = summary;
 		state.lastSummaryAt = Date.now();
+		state.lastSaveAt = Date.now();
+		state.lastSaveReason = reason;
 		state.lastActivityAt = Date.now();
 		state.outputTokensSinceSummary = 0;
 		await saveState();
 		if (ctx.hasUI) ctx.ui.notify(`Scryer recorder saved summary (${reason}). ${destinationSummary()}`, "info");
 	} finally {
-		setRecorderProgress(ctx, undefined);
+		if (ownsBusy) {
+			scryerBusy = undefined;
+			setRecorderProgress(ctx, undefined);
+			await flushQueuedInputs();
+		} else {
+			setRecorderProgress(ctx, undefined);
+		}
 	}
 }
 
@@ -747,6 +858,19 @@ export default function (pi: ExtensionAPI) {
 		state = await loadState(pi, ctx);
 		state.lastActivityAt = Date.now();
 		await saveState();
+	});
+
+	pi.on("input", async (event, ctx) => {
+		if (!scryerBusy) return { action: "continue" as const };
+		queuedInputs.push({ text: event.text, images: event.images as any });
+		if (ctx.hasUI) {
+			ctx.ui.notify(`Queued message until Scryer finishes: ${scryerBusy.label}`, "info");
+			ctx.ui.setWidget("scryer-recorder", [
+				...saveDestinationLines(`BUSY — ${scryerBusy.label}`),
+				`  Queued messages → ${queuedInputs.length}`,
+			], { placement: "belowEditor" });
+		}
+		return { action: "handled" as const };
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
@@ -821,10 +945,27 @@ export default function (pi: ExtensionAPI) {
 	register("ticket-picker", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
 	register("pt", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
 	register("pick-ticket", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
-	register("ut", "Update selected ticket description from recorder summary", updateActiveTaskDescription);
-	register("update-ticket", "Update selected ticket description from recorder summary", updateActiveTaskDescription);
+	register("ut", "Update selected ticket from current session without writing Daily", updateActiveTaskDescription);
+	register("update", "Update selected ticket from current session without writing Daily", updateActiveTaskDescription);
+	register("update-ticket", "Update selected ticket from current session without writing Daily", updateActiveTaskDescription);
 	register("ac", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 	register("add-comments", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
+
+	pi.registerCommand("deets", {
+		description: "Show current Scryer project/ticket/save context",
+		handler: async (_args, ctx) => {
+			try {
+				activeCtx = ctx;
+				state ??= await loadState(pi, ctx);
+				if (ctx.hasUI) {
+					ctx.ui.setWidget("scryer-recorder-deets", deetsLines(), { placement: "belowEditor" });
+					ctx.ui.notify(`${state.activeProjectName ?? "No project"} / ${state.activeTaskTitle ?? "No ticket"}`, "info");
+				}
+			} catch (err: any) {
+				if (ctx.hasUI) ctx.ui.notify(`Scryer deets failed: ${err?.message ?? err}`, "error");
+			}
+		},
+	});
 
 	pi.registerCommand("save", {
 		description: "Save a Scryer recorder summary to the Dailies PM ticket",
