@@ -1033,7 +1033,7 @@ export default function (pi: ExtensionAPI) {
 				if (ctx.hasUI) {
 					if (deetsTimer) clearTimeout(deetsTimer);
 					ctx.ui.setWidget("scryer-recorder-deets", undefined);
-					ctx.ui.setWidget("scryer-recorder", deetsLines(), { placement: "belowEditor" });
+					ctx.ui.setWidget("scryer-recorder", deetsLines());
 					ctx.ui.notify(`${state.activeProjectName ?? "No project"} / ${state.activeTaskTitle ?? "No ticket"}`, "info");
 					deetsTimer = setTimeout(() => {
 						if (!scryerBusy) ctx.ui.setWidget("scryer-recorder", undefined);
