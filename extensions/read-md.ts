@@ -90,11 +90,7 @@ async function readMarkdown(path: string): Promise<{ path: string; text: string;
 	return { path, text, truncated };
 }
 
-function renderMarkdownLine(line: string, theme: any): string {
-	if (/^#{1,6}\s+/.test(line)) return theme.fg("accent", theme.bold(line));
-	if (/^\s*```/.test(line)) return theme.fg("muted", line);
-	if (/^\s{4,}/.test(line)) return theme.fg("muted", line);
-	if (/^\s*[-*+]\s+/.test(line)) return line.replace(/^\s*([-*+])/, theme.fg("accent", "$1"));
+function renderMarkdownLine(line: string): string {
 	return line;
 }
 
@@ -116,7 +112,7 @@ async function showMarkdown(ctx: ExtensionContext, file: string) {
 				const size = pageSize();
 				const visible = lines.slice(top, top + size);
 				for (const line of visible) {
-					c.addChild(new Text(overlayStyle.line(truncateToWidth(renderMarkdownLine(line || " ", theme), bodyWidth), bodyWidth)));
+					c.addChild(new Text(overlayStyle.line(truncateToWidth(renderMarkdownLine(line || " "), bodyWidth), bodyWidth)));
 				}
 				for (let i = visible.length; i < size; i++) c.addChild(new Text(overlayStyle.line("", bodyWidth)));
 				c.addChild(new Text(overlayStyle.muted(`${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • pageUp/pageDown • esc close`, bodyWidth)));
