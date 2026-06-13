@@ -3,7 +3,7 @@ import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import { Container, Key, matchesKey, SelectList, Text, truncateToWidth, type SelectItem } from "@earendil-works/pi-tui";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { overlayStyle } from "./scryer/overlay-style.ts";
-import { modalBodyRows, modalHeightOption, modalWidthOption, readModalConfig } from "./scryer/modal-config.ts";
+import { modalAnchorOption, modalBodyRows, modalHeightOption, modalOffsetYOption, modalWidthOption, readModalConfig } from "./scryer/modal-config.ts";
 import { homedir } from "node:os";
 import { basename, relative, resolve } from "node:path";
 
@@ -225,7 +225,7 @@ async function showTextFile(ctx: ExtensionContext, file: string) {
 				tui.requestRender();
 			},
 		};
-	}, { overlay: true, overlayOptions: { anchor: "center", width: modalWidthOption(modalConfig), maxHeight: modalHeightOption(modalConfig) } });
+	}, { overlay: true, overlayOptions: { anchor: modalAnchorOption(modalConfig), offsetY: modalOffsetYOption(modalConfig), width: modalWidthOption(modalConfig), maxHeight: modalHeightOption(modalConfig) } });
 }
 
 async function openRead(ctx: ExtensionContext, args = "") {

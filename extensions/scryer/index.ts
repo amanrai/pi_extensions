@@ -16,7 +16,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appendTouchlogEntry, readTouchlog, type TouchLogEntry } from "./touchlog.ts";
 import { overlayStyle } from "./overlay-style.ts";
-import { describeModalConfig, modalBodyRows, modalHeightOption, modalWidthOption, parseModalConfigArgs, readModalConfig, writeModalConfig } from "./modal-config.ts";
+import { describeModalConfig, modalAnchorOption, modalBodyRows, modalHeightOption, modalOffsetYOption, modalWidthOption, parseModalConfigArgs, readModalConfig, writeModalConfig } from "./modal-config.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -696,7 +696,7 @@ async function showScrollableModal(ctx: ExtensionContext, title: string, lines: 
 				tui.requestRender();
 			},
 		};
-	}, { overlay: true, overlayOptions: { anchor: "center", width: modalWidthOption(modalConfig), maxHeight: modalHeightOption(modalConfig) } });
+	}, { overlay: true, overlayOptions: { anchor: modalAnchorOption(modalConfig), offsetY: modalOffsetYOption(modalConfig), width: modalWidthOption(modalConfig), maxHeight: modalHeightOption(modalConfig) } });
 }
 
 async function showCockpit(ctx: ExtensionContext) {
@@ -1080,7 +1080,7 @@ export default function (pi: ExtensionAPI) {
 	register("add-comments", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 
 	pi.registerCommand("modal-config", {
-		description: "Configure modal width/height. Usage: /modal-config [width <cols>] [height <rows>] | /modal-config <cols> <rows> | /modal-config reset",
+		description: "Configure modal width/height/top. Usage: /modal-config [width <cols>] [height <rows>] [top <rows>] | /modal-config <cols> <rows> [top] | /modal-config reset",
 		handler: async (args, ctx) => {
 			try {
 				const existing = await readModalConfig();
