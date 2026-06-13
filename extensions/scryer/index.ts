@@ -10,10 +10,11 @@ import { displayPath, loadState, saveState, today } from "./state.ts";
 import { projectLabel, projectScore, repoContext } from "./repo.ts";
 import { contentText, summaryPrompt, updateTicketPrompt } from "./prompts.ts";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { appendTouchlogEntry, readTouchlog, type TouchLogEntry } from "./touchlog.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -28,7 +29,6 @@ let queuedInputs: Array<{ text: string; images?: any[] }> = [];
 let deetsTimer: NodeJS.Timeout | undefined;
 let foregroundStepUpdate: ((line: string) => void) | undefined;
 let pendingSave: { reason: string; ctx: ExtensionContext; endSession: boolean } | undefined;
-let touchedRepoRoots = new Set<string>();
 
 type PickerItem = SelectItem & { value: string };
 
@@ -516,47 +516,54 @@ function expandPath(rawPath: string, cwd: string): string {
 	return isAbsolute(trimmed) ? trimmed : resolve(cwd, trimmed);
 }
 
-async function gitRootForPath(path: string): Promise<string | undefined> {
-	for (const candidate of [path, dirname(path)]) {
-		try {
-			const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: candidate, timeout: 3000 });
-			const root = stdout.trim();
-			if (root) return root;
-		} catch {}
+async function gitRoot(cwd: string): Promise<string | undefined> {
+	try {
+		const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd, timeout: 3000 });
+		return stdout.trim() || undefined;
+	} catch {
+		return undefined;
 	}
-	return undefined;
 }
 
-async function rememberTouchedPath(ctx: ExtensionContext, rawPath: unknown) {
-	if (typeof rawPath !== "string" || !rawPath.trim()) return;
-	const root = await gitRootForPath(expandPath(rawPath, ctx.cwd));
-	if (root) touchedRepoRoots.add(root);
+function isCommitCommand(command: string): boolean {
+	return /(^|[;&|()\s])git\s+(?:-C\s+\S+\s+)?commit\b/.test(command);
 }
 
-async function collectTouchedCommits(ctx: ExtensionContext) {
-	const roots = new Set(touchedRepoRoots);
-	const cwdRoot = await gitRootForPath(ctx.cwd);
-	if (cwdRoot) roots.add(cwdRoot);
-	const since = Math.floor((state?.sessionStartedAt ?? Date.now()) / 1000);
-	const rows: Array<{ repo: string; root: string; hash: string; subject: string; timestamp: number }> = [];
-	for (const root of roots) {
-		try {
-			const { stdout } = await execFileAsync("git", ["log", `--since=${since}`, "--format=%H%x00%ct%x00%s"], { cwd: root, timeout: 5000 });
-			for (const line of stdout.split("\n").filter(Boolean)) {
-				const [hash, ts, subject] = line.split("\x00");
-				if (hash && ts && subject) rows.push({ repo: root.split("/").pop() ?? root, root, hash, subject, timestamp: Number(ts) * 1000 });
-			}
-		} catch {}
-	}
-	return rows.sort((a, b) => b.timestamp - a.timestamp);
+function unquoteShellPath(path: string): string {
+	return path.trim().replace(/^['"]|['"]$/g, "");
 }
 
-function touchedMarkdown(rows: Awaited<ReturnType<typeof collectTouchedCommits>>): string {
-	if (!rows.length) return "## Commits touched this session\n\nNo commits found since this Pi session started.";
+function inferCommitCwd(ctx: ExtensionContext, command: string): string {
+	const gitC = command.match(/\bgit\s+-C\s+([^\s;&|]+)\s+commit\b/);
+	if (gitC?.[1]) return expandPath(unquoteShellPath(gitC[1]), ctx.cwd);
+	const cdMatches = [...command.matchAll(/(?:^|[;&|]\s*)cd\s+([^;&|]+?)\s*(?:&&|;)/g)];
+	const lastCd = cdMatches.at(-1)?.[1];
+	if (lastCd) return expandPath(unquoteShellPath(lastCd), ctx.cwd);
+	return ctx.cwd;
+}
+
+async function recordCommitIfAny(ctx: ExtensionContext, command: string, ok: boolean) {
+	if (!ok || !isCommitCommand(command)) return;
+	const root = await gitRoot(inferCommitCwd(ctx, command));
+	if (!root) return;
+	try {
+		const { stdout } = await execFileAsync("git", ["log", "-1", "--format=%H%x00%ct%x00%s"], { cwd: root, timeout: 3000 });
+		const [hash, ts, subject] = stdout.trim().split("\x00");
+		if (!hash || !ts || !subject) return;
+		await appendTouchlogEntry(ctx, { repoRoot: root, hash, subject, timestamp: Number(ts) * 1000 });
+	} catch {}
+}
+
+async function collectTouchedCommits(ctx: ExtensionContext): Promise<TouchLogEntry[]> {
+	return (await readTouchlog(ctx)).sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function touchedMarkdown(rows: TouchLogEntry[]): string {
+	if (!rows.length) return "## Commits touched this session\n\nNo commits recorded for this Pi session yet.";
 	return [
 		"## Commits touched this session",
 		"",
-		...rows.map((r) => `- \`${r.repo}\` \`${r.hash.slice(0, 7)}\` ${r.subject} — ${ago(r.timestamp)}`),
+		...rows.map((r) => `- \`${r.repoName}\` \`${r.hash.slice(0, 7)}\` ${r.subject} — ${ago(r.timestamp)}`),
 	].join("\n");
 }
 
@@ -838,17 +845,22 @@ export default function (pi: ExtensionAPI) {
 		await saveState(state);
 	});
 
-	pi.on("tool_call", async (event, ctx) => {
+	pi.on("tool_call", async (event) => {
 		recentTools.push({ name: event.toolName, input: event.input });
 		if (recentTools.length > 100) recentTools = recentTools.slice(-100);
-		if (["read", "write", "edit"].includes(event.toolName)) await rememberTouchedPath(ctx, (event.input as any)?.path);
 	});
 
-	pi.on("tool_result", async (event: any) => {
+	pi.on("tool_result", async (event: any, ctx) => {
 		const last = [...recentTools].reverse().find((t) => t.name === event.toolName && t.ok === undefined);
+		const ok = !event.result?.isError;
 		if (last) {
-			last.ok = !event.result?.isError;
+			last.ok = ok;
 			last.error = event.result?.isError ? contentText(event.result?.content).slice(0, 200) : undefined;
+		}
+		if (event.toolName === "bash") {
+			const input = (event.input ?? last?.input) as any;
+			const command = String(input?.command ?? "");
+			await recordCommitIfAny(ctx, command, ok);
 		}
 	});
 

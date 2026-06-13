@@ -12,3 +12,4 @@ export const RECORDER_DIR = join(homedir(), ".pi", "agent", "scryer-recorder");
 export const STATE_DIR = join(RECORDER_DIR, "state");
 export const OUTBOX_DIR = join(RECORDER_DIR, "outbox");
 export const SUMMARIES_DIR = join(RECORDER_DIR, "summaries");
+export const TOUCHLOG_DIR = join(RECORDER_DIR, "touchlogs");
