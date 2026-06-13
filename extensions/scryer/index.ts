@@ -619,7 +619,6 @@ function groupedTouchedLines(rows: TouchLogEntry[]): string[] {
 	for (const [repo, commits] of byRepo) {
 		lines.push(`${repo}  ${commits.length} commit${commits.length === 1 ? "" : "s"}`);
 		for (const c of commits) lines.push(`  ● ${c.hash.slice(0, 7)} ${c.subject} · ${ago(c.timestamp)}`);
-		lines.push("");
 	}
 	return lines;
 }
@@ -656,7 +655,7 @@ async function showScrollableModal(ctx: ExtensionContext, title: string, lines: 
 				tui.requestRender();
 			},
 		};
-	});
+	}, { overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } });
 }
 
 async function showTouched(ctx: ExtensionContext) {

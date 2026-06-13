@@ -133,7 +133,7 @@ async function showMarkdown(ctx: ExtensionContext, file: string) {
 				tui.requestRender();
 			},
 		};
-	});
+	}, { overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } });
 }
 
 async function openReadMd(ctx: ExtensionContext, args = "") {
