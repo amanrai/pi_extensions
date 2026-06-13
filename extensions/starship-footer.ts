@@ -43,13 +43,39 @@ function formatPwd(cwd: string): string {
 
 interface PRInfo { number: number; url: string; }
 
+function ago(ts?: number): string | null {
+  if (!ts) return null;
+  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function freshness(state: RecorderState): string | null {
+  if (state.activeTaskTitle && state.lastUpdateAt) return `updated ${ago(state.lastUpdateAt)}`;
+  if (state.lastSaveAt) return `saved ${ago(state.lastSaveAt)}`;
+  if (state.lastSaveAttemptAt) return `attempted ${ago(state.lastSaveAttemptAt)}`;
+  return null;
+}
+
 function formatScryerContext(state?: RecorderState): string | null {
   if (!state) return null;
-  if (state.activeProjectName && state.activeTaskTitle) return `◇ ${state.activeProjectName} / ${state.activeTaskTitle}`;
-  if (state.activeProjectName && state.noTicketForSession) return `◇ ${state.activeProjectName} / no ticket`;
-  if (state.activeProjectName) return `◇ ${state.activeProjectName}`;
-  if (state.noProjectForSession) return "◇ no Scryer project";
-  return null;
+  const suffix = freshness(state);
+  const tail = suffix ? dim(` · ${suffix}`) : "";
+  if (state.activeProjectName && state.activeTaskTitle) {
+    return `${green("●")} ${green(`◇ ${state.activeProjectName} / ${state.activeTaskTitle}`)}${tail}`;
+  }
+  if (state.activeProjectName && state.noTicketForSession) {
+    return `${yellow("○")} ${yellow(`◇ ${state.activeProjectName} / no ticket`)}${tail}`;
+  }
+  if (state.activeProjectName) {
+    return `${yellow("○")} ${yellow(`◇ ${state.activeProjectName} / pick ticket`)}${tail}`;
+  }
+  if (state.noProjectForSession) return `${dim("○ ◇ no Scryer project")}${tail}`;
+  return `${yellow("○")} ${yellow("◇ pick Scryer project")}${tail}`;
 }
 
 async function fetchScryerContext(ctx: ExtensionContext): Promise<string | null> {
@@ -173,7 +199,7 @@ export default function (pi: ExtensionAPI) {
           }
 
           const left = leftParts.join("");
-          const scryerLine = scryerContext ? dim(scryerContext) : null;
+          const scryerLine = scryerContext;
 
           // ── Right: model ◆ thinking  ↑in ↓out $cost ────────────────────
           const rightParts: string[] = [];
