@@ -29,6 +29,23 @@ let queuedInputs: Array<{ text: string; images?: any[] }> = [];
 let deetsTimer: NodeJS.Timeout | undefined;
 let foregroundStepUpdate: ((line: string) => void) | undefined;
 let pendingSave: { reason: string; ctx: ExtensionContext; endSession: boolean } | undefined;
+const widgetTimers = new Map<string, NodeJS.Timeout>();
+
+function setTransientWidget(ctx: ExtensionContext, key: string, lines: string[], options?: any, ttlMs = 30_000) {
+	if (!ctx.hasUI) return;
+	if (widgetTimers.has(key)) clearTimeout(widgetTimers.get(key));
+	ctx.ui.setWidget(key, lines, options);
+	widgetTimers.set(key, setTimeout(() => {
+		ctx.ui.setWidget(key, undefined);
+		widgetTimers.delete(key);
+	}, ttlMs));
+}
+
+function clearTransientWidget(ctx: ExtensionContext, key: string) {
+	if (widgetTimers.has(key)) clearTimeout(widgetTimers.get(key));
+	widgetTimers.delete(key);
+	if (ctx.hasUI) ctx.ui.setWidget(key, undefined);
+}
 
 type PickerItem = SelectItem & { value: string };
 
@@ -593,7 +610,7 @@ async function showTouched(ctx: ExtensionContext) {
 	const rows = await collectTouchedCommits(ctx);
 	const markdown = touchedMarkdown(rows);
 	if (ctx.hasUI) {
-		ctx.ui.setWidget("scryer-touched", markdown.split("\n"), { placement: "belowEditor" });
+		setTransientWidget(ctx, "scryer-touched", markdown.split("\n"), { placement: "belowEditor" });
 		ctx.ui.notify(`Touched commits: ${rows.length}`, "info");
 	}
 	await updateDailyTouchedSection(ctx, markdown);
@@ -611,7 +628,7 @@ function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 	if (!ctx.hasUI) return;
 	if (!line) {
 		ctx.ui.setStatus("scryer-recorder", undefined);
-		ctx.ui.setWidget("scryer-recorder", undefined);
+		clearTransientWidget(ctx, "scryer-recorder");
 		(ctx.ui as any).setWorkingMessage?.();
 		(ctx.ui as any).setWorkingIndicator?.();
 		(ctx.ui as any).setWorkingVisible?.(true);
@@ -620,7 +637,7 @@ function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 	const prefix = scryerBusy ? `BUSY — ${line}` : line;
 	foregroundStepUpdate?.(prefix);
 	ctx.ui.setStatus("scryer-recorder", prefix);
-	if (!foregroundStepUpdate) ctx.ui.setWidget("scryer-recorder", saveDestinationLines(prefix), { placement: "belowEditor" });
+	if (!foregroundStepUpdate) setTransientWidget(ctx, "scryer-recorder", saveDestinationLines(prefix), { placement: "belowEditor" });
 	(ctx.ui as any).setWorkingVisible?.(true);
 	(ctx.ui as any).setWorkingMessage?.(`Scryer: ${line}`);
 	(ctx.ui as any).setWorkingIndicator?.({ frames: ["·", "•", "●", "•"], intervalMs: 120 });
@@ -814,7 +831,8 @@ export default function (pi: ExtensionAPI) {
 		state.sessionStartedAt ??= Date.now();
 		state.lastActivityAt = Date.now();
 		if (ctx.hasUI) {
-			ctx.ui.setWidget("scryer-recorder", undefined);
+			clearTransientWidget(ctx, "scryer-recorder");
+			clearTransientWidget(ctx, "scryer-touched");
 			ctx.ui.setWidget("scryer-recorder-deets", undefined);
 		}
 		await saveState(state);
@@ -825,7 +843,7 @@ export default function (pi: ExtensionAPI) {
 		queuedInputs.push({ text: event.text, images: event.images as any });
 		if (ctx.hasUI) {
 			ctx.ui.notify(`Queued message until Scryer finishes: ${scryerBusy.label}`, "info");
-			ctx.ui.setWidget("scryer-recorder", [
+			setTransientWidget(ctx, "scryer-recorder", [
 				...saveDestinationLines(`BUSY — ${scryerBusy.label}`),
 				`  Queued messages → ${queuedInputs.length}`,
 			], { placement: "belowEditor" });
@@ -886,6 +904,8 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", async () => {
 		if (idleTimer) clearTimeout(idleTimer);
+		for (const timer of widgetTimers.values()) clearTimeout(timer);
+		widgetTimers.clear();
 		await saveState(state);
 	});
 
