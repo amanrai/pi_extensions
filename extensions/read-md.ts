@@ -2,7 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import { Container, Key, matchesKey, SelectList, Text, truncateToWidth, type SelectItem } from "@earendil-works/pi-tui";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { overlayStyle } from "./overlay-style.ts";
+import { overlayStyle } from "./scryer/overlay-style.ts";
 import { homedir } from "node:os";
 import { basename, relative, resolve } from "node:path";
 
@@ -155,7 +155,7 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerShortcut("ctrl+k", {
+	pi.registerShortcut("ctrl+shift+k", {
 		description: "Open Markdown reader",
 		handler: async (ctx) => {
 			try { await openReadMd(ctx); }
