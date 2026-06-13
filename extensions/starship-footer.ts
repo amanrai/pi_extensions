@@ -42,6 +42,7 @@ function formatPwd(cwd: string): string {
 // ── Data fetching ────────────────────────────────────────────────────────────
 
 interface PRInfo { number: number; url: string; }
+interface CommitInfo { subject: string; timestamp: number; hash: string; }
 
 function ago(ts?: number): string | null {
   if (!ts) return null;
@@ -133,11 +134,32 @@ async function fetchPR(cwd: string): Promise<PRInfo | null> {
   } catch { return null; }
 }
 
+async function fetchLastCommit(cwd: string): Promise<CommitInfo | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["log", "-1", "--format=%H%x00%ct%x00%s"],
+      { cwd, timeout: 3000 },
+    );
+    const [hash, ts, subject] = stdout.trim().split("\x00");
+    if (!hash || !ts || !subject) return null;
+    return { hash, timestamp: Number(ts) * 1000, subject };
+  } catch { return null; }
+}
+
+function formatCommitLine(commit: CommitInfo | null): string | null {
+  if (!commit) return null;
+  const when = ago(commit.timestamp);
+  const short = commit.hash.slice(0, 7);
+  return dim(`↳ ${short} ${commit.subject}${when ? ` · ${when}` : ""}`);
+}
+
 // ── Extension ────────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
   let starshipPrompt: string | null = null;
   let pr: PRInfo | null             = null;
+  let lastCommit: CommitInfo | null = null;
   let scryerContext: string | null  = null;
   let thinkingLevel: string         = "off";
   let lastRenderWidth               = 120;
@@ -158,10 +180,11 @@ export default function (pi: ExtensionAPI) {
   }
 
   async function refreshAll(ctx: ExtensionContext) {
-    [pr] = await Promise.all([
+    [pr, lastCommit] = await Promise.all([
       fetchPR(ctx.cwd),
-      refreshStarship(ctx.cwd, lastRenderWidth),
-      refreshScryer(ctx),
+      fetchLastCommit(ctx.cwd),
+      refreshStarship(ctx.cwd, lastRenderWidth).then(() => null),
+      refreshScryer(ctx).then(() => null),
     ]);
     requestRender?.();
   }
@@ -242,6 +265,8 @@ export default function (pi: ExtensionAPI) {
           const gap = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
           const lines = [truncateToWidth(left + gap + right, width)];
           if (scryerLine) lines.push(truncateToWidth(scryerLine, width));
+          const commitLine = formatCommitLine(lastCommit);
+          if (commitLine) lines.push(truncateToWidth(commitLine, width));
           return lines;
         },
       };
