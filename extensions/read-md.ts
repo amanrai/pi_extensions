@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
-import { Container, SelectList, Text, type SelectItem } from "@earendil-works/pi-tui";
+import { Container, Key, matchesKey, SelectList, Text, truncateToWidth, type SelectItem } from "@earendil-works/pi-tui";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, relative, resolve } from "node:path";
@@ -79,11 +79,6 @@ function splitLines(text: string): string[] {
 	return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
 }
 
-function trimVisual(line: string, width: number): string {
-	if (line.length <= width) return line;
-	return line.slice(0, Math.max(0, width - 1)) + "…";
-}
-
 async function readMarkdown(path: string): Promise<{ path: string; text: string; truncated: boolean }> {
 	const info = await stat(path);
 	if (!info.isFile()) throw new Error(`Not a file: ${path}`);
@@ -119,7 +114,7 @@ async function showMarkdown(ctx: ExtensionContext, file: string) {
 				if (doc.truncated) c.addChild(new Text(theme.fg("warning", ` truncated at ${Math.round(MAX_FILE_BYTES / 1024)}KB`)));
 				const size = pageSize();
 				for (const line of lines.slice(top, top + size)) {
-					c.addChild(new Text(renderMarkdownLine(trimVisual(line || " ", bodyWidth), theme)));
+					c.addChild(new Text(truncateToWidth(renderMarkdownLine(line || " ", theme), bodyWidth)));
 				}
 				c.addChild(new Text(theme.fg("dim", ` ${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • pageUp/pageDown • esc close`)));
 				c.addChild(new DynamicBorder((s) => theme.fg("border", s)));
@@ -127,13 +122,13 @@ async function showMarkdown(ctx: ExtensionContext, file: string) {
 			},
 			invalidate: () => {},
 			handleInput: (data: string) => {
-				if (data === "\x1b" || data === "\x03") return done(undefined);
-				if (data === "\x1b[A") top -= 1;
-				else if (data === "\x1b[B") top += 1;
-				else if (data === "\x1b[5~") top -= pageSize();
-				else if (data === "\x1b[6~") top += pageSize();
-				else if (data === "\x1b[H" || data === "\x1b[1~") top = 0;
-				else if (data === "\x1b[F" || data === "\x1b[4~") top = lines.length;
+				if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl("c"))) return done(undefined);
+				if (matchesKey(data, Key.up)) top -= 1;
+				else if (matchesKey(data, Key.down)) top += 1;
+				else if (matchesKey(data, Key.pageUp)) top -= pageSize();
+				else if (matchesKey(data, Key.pageDown)) top += pageSize();
+				else if (matchesKey(data, Key.home)) top = 0;
+				else if (matchesKey(data, Key.end)) top = lines.length;
 				clamp();
 				tui.requestRender();
 			},
