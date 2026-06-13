@@ -25,6 +25,9 @@ type RecorderState = {
 	cwdTag: string;
 	currentDate?: string;
 	ticketId?: string;
+	ticketProjectId?: string;
+	ticketProjectName?: string;
+	ticketTitle?: string;
 	lastSummaryAt?: number;
 	lastSaveAttemptAt?: number;
 	lastActivityAt?: number;
@@ -367,24 +370,45 @@ async function chooseActiveProjectAndTask(ctx: ExtensionContext) {
 	if (await pickActiveProject(ctx)) await pickActiveTicket(ctx);
 }
 
-async function ticketExists(ticketId: string): Promise<boolean> {
+async function getTicket(ticketId: string): Promise<any | undefined> {
 	try {
-		await api(`/api/tasks/${ticketId}`);
-		return true;
+		return await api(`/api/tasks/${ticketId}`);
 	} catch (err: any) {
-		if (String(err?.message ?? err).includes("404")) return false;
+		if (String(err?.message ?? err).includes("404")) return undefined;
 		throw err;
 	}
+}
+
+async function dailyTargetProject(): Promise<any> {
+	if (state?.activeProjectId) {
+		try {
+			return await api(`/api/projects/${state.activeProjectId}`);
+		} catch (err: any) {
+			if (!String(err?.message ?? err).includes("404")) throw err;
+			state.activeProjectId = undefined;
+			state.activeProjectName = undefined;
+		}
+	}
+	return findDailiesProject();
 }
 
 async function ensureTicket(finalizePrevious = true): Promise<string> {
 	if (!state) throw new Error("recorder state missing");
 	const nowDate = today();
 	const now = Date.now();
+	const project = await dailyTargetProject();
 	const dateChanged = state.currentDate && state.currentDate !== nowDate;
+	const projectChanged = state.ticketProjectId && state.ticketProjectId !== project.id;
 	const staleEnough = !state.lastActivityAt || now - state.lastActivityAt >= NEW_DAILY_HOURS * 60 * 60 * 1000;
-	if (state.ticketId && (!dateChanged || !staleEnough)) {
-		if (await ticketExists(state.ticketId)) return state.ticketId;
+	if (state.ticketId && !projectChanged && (!dateChanged || !staleEnough)) {
+		const existing = await getTicket(state.ticketId);
+		if (existing && existing.project_id === project.id) {
+			state.ticketTitle = existing.title;
+			state.ticketProjectId = project.id;
+			state.ticketProjectName = project.name;
+			await saveState();
+			return state.ticketId;
+		}
 		state.ticketId = undefined;
 		state.currentDate = undefined;
 	}
@@ -398,7 +422,6 @@ async function ensureTicket(finalizePrevious = true): Promise<string> {
 			if (!String(err?.message ?? err).includes("404")) throw err;
 		}
 	}
-	const project = await findDailiesProject();
 	const taskTypeId = await findWorkTaskType(project.id);
 	const title = `Pi Daily — ${nowDate} — ${state.sessionName}`;
 	const task = await api("/api/tasks", {
@@ -409,12 +432,15 @@ async function ensureTicket(finalizePrevious = true): Promise<string> {
 			task_type_id: taskTypeId,
 			status: "in_execution",
 			description_md: state.summary || "# Pi Daily\n\nSummary pending.",
-			tag_names: [state.cwdTag],
+			tag_names: ["dailies", state.cwdTag],
 			created_by_role: "pi",
 			created_by_instance_key: "scryer-recorder",
 		}),
 	});
 	state.ticketId = task.id;
+	state.ticketTitle = task.title;
+	state.ticketProjectId = project.id;
+	state.ticketProjectName = project.name;
 	state.currentDate = nowDate;
 	state.finalized = false;
 	await saveState();
@@ -498,15 +524,18 @@ async function writeLocalSummary(reason: string, summary: string, endSession: bo
 
 async function patchTicket(ticketId: string, summary: string, endSession: boolean) {
 	if (!state) throw new Error("recorder state missing");
-	return api(`/api/tasks/${ticketId}`, {
+	const title = `Pi Daily — ${state.currentDate ?? today()} — ${state.sessionName}`;
+	const task = await api(`/api/tasks/${ticketId}`, {
 		method: "PATCH",
 		body: JSON.stringify({
-			title: `Pi Daily — ${state.currentDate ?? today()} — ${state.sessionName}`,
+			title,
 			description_md: summary,
 			status: endSession ? "human_reviewed_and_closed" : "in_execution",
-			tag_names: [state.cwdTag],
+			tag_names: ["dailies", state.cwdTag],
 		}),
 	});
+	state.ticketTitle = task?.title ?? title;
+	return task;
 }
 
 async function patchActiveTask(summary: string) {
@@ -592,6 +621,33 @@ async function addActiveTaskComment(ctx: ExtensionContext) {
 	if (ctx.hasUI) ctx.ui.notify(`Added comment to ticket: ${activeTargetLabel()}`, "info");
 }
 
+function dailyProjectLabel(): string {
+	if (state?.noProjectForSession) return "Dailies";
+	return state?.activeProjectName ?? state?.ticketProjectName ?? "Dailies";
+}
+
+function dailyTicketLabel(): string {
+	return state?.ticketTitle ?? (state?.currentDate ? `Pi Daily — ${state.currentDate} — ${state.sessionName}` : "will create/find daily ticket");
+}
+
+function activeWorkLabel(): string {
+	if (state?.activeTaskId) return `${state.activeProjectName ?? "selected project"} / ${state.activeTaskTitle ?? state.activeTaskId}`;
+	if (state?.noTicketForSession) return "none — consciously skipped for this session";
+	return "none selected";
+}
+
+function destinationSummary(): string {
+	return `Daily → ${dailyProjectLabel()} / ${dailyTicketLabel()} · Work → ${activeWorkLabel()}`;
+}
+
+function saveDestinationLines(line: string): string[] {
+	return [
+		`▸ Scryer recorder: ${line}`,
+		`  Daily → ${dailyProjectLabel()} / ${dailyTicketLabel()}`,
+		`  Work  → ${activeWorkLabel()}`,
+	];
+}
+
 function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 	if (!ctx.hasUI) return;
 	if (!line) {
@@ -600,7 +656,7 @@ function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 		return;
 	}
 	ctx.ui.setStatus("scryer-recorder", line);
-	ctx.ui.setWidget("scryer-recorder", [`▸ Scryer recorder: ${line}`], { placement: "belowEditor" });
+	ctx.ui.setWidget("scryer-recorder", saveDestinationLines(line), { placement: "belowEditor" });
 }
 
 async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSession = false) {
@@ -622,29 +678,38 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 		state.lastSaveAttemptAt = Date.now();
 		await saveState();
 
+		setRecorderProgress(ctx, "checking Scryer destination…");
+		const pmAvailable = await ensurePm(ctx);
+		if (pmAvailable) {
+			await chooseActiveProjectAndTask(ctx);
+			await saveState();
+		}
+
 		setRecorderProgress(ctx, `saving (${reason}): summarizing with active model…`);
 		const summary = await generateSummary(ctx, reason, endSession);
 
 		setRecorderProgress(ctx, "writing local summary…");
 		await writeLocalSummary(reason, summary, endSession);
 
-		setRecorderProgress(ctx, "checking PM system…");
-		if (await ensurePm(ctx)) {
-			await chooseActiveProjectAndTask(ctx);
-			setRecorderProgress(ctx, "creating/updating Dailies ticket…");
+		if (pmAvailable) {
+			setRecorderProgress(ctx, "creating/updating daily ticket…");
 			let ticketId = await ensureTicket(!endSession);
+			setRecorderProgress(ctx, "writing daily ticket…");
 			try {
 				await patchTicket(ticketId, summary, endSession);
 			} catch (err: any) {
 				if (!String(err?.message ?? err).includes("404")) throw err;
-				setRecorderProgress(ctx, "ticket missing; creating a fresh one…");
+				setRecorderProgress(ctx, "daily ticket missing; creating a fresh one…");
 				state.ticketId = undefined;
+				state.ticketProjectId = undefined;
+				state.ticketProjectName = undefined;
+				state.ticketTitle = undefined;
 				state.currentDate = undefined;
 				ticketId = await ensureTicket(false);
 				await patchTicket(ticketId, summary, endSession);
 			}
 			if (state.activeTaskId) {
-				setRecorderProgress(ctx, "updating active project ticket…");
+				setRecorderProgress(ctx, "updating active work ticket…");
 				await patchActiveTask(summary);
 			}
 			if (endSession) state.finalized = true;
@@ -657,7 +722,7 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 		state.lastActivityAt = Date.now();
 		state.outputTokensSinceSummary = 0;
 		await saveState();
-		if (ctx.hasUI) ctx.ui.notify(`Scryer recorder saved summary (${reason})`, "info");
+		if (ctx.hasUI) ctx.ui.notify(`Scryer recorder saved summary (${reason}). ${destinationSummary()}`, "info");
 	} finally {
 		setRecorderProgress(ctx, undefined);
 	}
