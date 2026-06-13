@@ -11,8 +11,10 @@
  */
 
 import type { AssistantMessage } from "@mariozechner/pi-ai";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+import { readScryerState } from "./scryer/state.ts";
+import type { RecorderState } from "./scryer/types.ts";
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
@@ -40,6 +42,23 @@ function formatPwd(cwd: string): string {
 // ── Data fetching ────────────────────────────────────────────────────────────
 
 interface PRInfo { number: number; url: string; }
+
+function formatScryerContext(state?: RecorderState): string | null {
+  if (!state) return null;
+  if (state.activeProjectName && state.activeTaskTitle) return `◇ ${state.activeProjectName} / ${state.activeTaskTitle}`;
+  if (state.activeProjectName && state.noTicketForSession) return `◇ ${state.activeProjectName} / no ticket`;
+  if (state.activeProjectName) return `◇ ${state.activeProjectName}`;
+  if (state.noProjectForSession) return "◇ no Scryer project";
+  return null;
+}
+
+async function fetchScryerContext(ctx: ExtensionContext): Promise<string | null> {
+  try {
+    return formatScryerContext(await readScryerState(ctx));
+  } catch {
+    return null;
+  }
+}
 
 async function fetchStarshipPrompt(cwd: string, width: number): Promise<string | null> {
   try {
@@ -93,31 +112,44 @@ async function fetchPR(cwd: string): Promise<PRInfo | null> {
 export default function (pi: ExtensionAPI) {
   let starshipPrompt: string | null = null;
   let pr: PRInfo | null             = null;
+  let scryerContext: string | null  = null;
   let thinkingLevel: string         = "off";
   let lastRenderWidth               = 120;
   let requestRender: (() => void) | undefined;
+  let scryerPoll: NodeJS.Timeout | undefined;
 
   async function refreshStarship(cwd: string, width: number) {
     starshipPrompt = await fetchStarshipPrompt(cwd, width);
     requestRender?.();
   }
 
-  async function refreshAll(cwd: string) {
+  async function refreshScryer(ctx: ExtensionContext) {
+    const next = await fetchScryerContext(ctx);
+    if (next !== scryerContext) {
+      scryerContext = next;
+      requestRender?.();
+    }
+  }
+
+  async function refreshAll(ctx: ExtensionContext) {
     [pr] = await Promise.all([
-      fetchPR(cwd),
-      refreshStarship(cwd, lastRenderWidth),
+      fetchPR(ctx.cwd),
+      refreshStarship(ctx.cwd, lastRenderWidth),
+      refreshScryer(ctx),
     ]);
     requestRender?.();
   }
 
   pi.on("session_start", async (_event, ctx) => {
     thinkingLevel = pi.getThinkingLevel();
-    refreshAll(ctx.cwd);
+    refreshAll(ctx);
+    if (scryerPoll) clearInterval(scryerPoll);
+    scryerPoll = setInterval(() => refreshScryer(ctx), 2000);
 
     ctx.ui.setFooter((tui, _theme, footerData) => {
       requestRender = () => tui.requestRender();
 
-      const unsub = footerData.onBranchChange(() => refreshAll(ctx.cwd));
+      const unsub = footerData.onBranchChange(() => refreshAll(ctx));
 
       return {
         dispose: unsub,
@@ -141,6 +173,7 @@ export default function (pi: ExtensionAPI) {
           }
 
           const left = leftParts.join("");
+          const scryerLine = scryerContext ? dim(scryerContext) : null;
 
           // ── Right: model ◆ thinking  ↑in ↓out $cost ────────────────────
           const rightParts: string[] = [];
@@ -181,15 +214,21 @@ export default function (pi: ExtensionAPI) {
 
           const right = rightParts.join("");
           const gap = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
-
-          return [truncateToWidth(left + gap + right, width)];
+          const lines = [truncateToWidth(left + gap + right, width)];
+          if (scryerLine) lines.push(truncateToWidth(scryerLine, width));
+          return lines;
         },
       };
     });
   });
 
   pi.on("agent_end", (_event, ctx) => {
-    refreshAll(ctx.cwd);
+    refreshAll(ctx);
+  });
+
+  pi.on("session_shutdown", async () => {
+    if (scryerPoll) clearInterval(scryerPoll);
+    scryerPoll = undefined;
   });
 
   pi.on("thinking_level_select", async (event, _ctx) => {

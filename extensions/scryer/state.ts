@@ -15,7 +15,7 @@ export function displayPath(path: string): string {
 	return path.startsWith(home) ? `~${path.slice(home.length)}` : path;
 }
 
-function sessionKey(ctx: ExtensionContext): string {
+export function scryerSessionKey(ctx: ExtensionContext): string {
 	const file = ctx.sessionManager.getSessionFile?.();
 	if (file) return createHash("sha1").update(file).digest("hex");
 	return createHash("sha1").update(`${ctx.cwd}:${Date.now()}`).digest("hex");
@@ -52,14 +52,18 @@ async function readJson<T>(path: string): Promise<T | undefined> {
 	}
 }
 
-function statePath(key: string): string {
-	return join(STATE_DIR, `${key}.json`);
+export function getScryerStatePath(ctx: ExtensionContext): string {
+	return join(STATE_DIR, `${scryerSessionKey(ctx)}.json`);
+}
+
+export async function readScryerState(ctx: ExtensionContext): Promise<RecorderState | undefined> {
+	return readJson<RecorderState>(getScryerStatePath(ctx));
 }
 
 export async function loadState(pi: ExtensionAPI, ctx: ExtensionContext): Promise<RecorderState> {
-	const key = sessionKey(ctx);
+	const key = scryerSessionKey(ctx);
 	const name = sessionName(pi, ctx);
-	const existing = await readJson<RecorderState>(statePath(key));
+	const existing = await readJson<RecorderState>(getScryerStatePath(ctx));
 	if (existing) {
 		if (!existing.sessionName || isUglySessionName(existing.sessionName)) existing.sessionName = name;
 		return existing;
@@ -78,5 +82,5 @@ export async function loadState(pi: ExtensionAPI, ctx: ExtensionContext): Promis
 export async function saveState(state?: RecorderState) {
 	if (!state) return;
 	await mkdir(STATE_DIR, { recursive: true });
-	await writeFile(statePath(state.sessionKey), JSON.stringify(state, null, 2));
+	await writeFile(join(STATE_DIR, `${state.sessionKey}.json`), JSON.stringify(state, null, 2));
 }
