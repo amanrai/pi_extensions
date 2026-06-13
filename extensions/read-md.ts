@@ -105,19 +105,19 @@ async function showMarkdown(ctx: ExtensionContext, file: string) {
 			render: (width: number) => {
 				clamp();
 				const bodyWidth = Math.max(20, width - 2);
-				const c = new Container();
-				c.addChild(new Text(overlayStyle.border(bodyWidth)));
-				c.addChild(new Text(overlayStyle.title(`${basename(doc.path)}  ${relative(ctx.cwd, doc.path)}`, bodyWidth)));
-				if (doc.truncated) c.addChild(new Text(overlayStyle.muted(`truncated at ${Math.round(MAX_FILE_BYTES / 1024)}KB`, bodyWidth)));
+				const rendered: string[] = [];
+				rendered.push(overlayStyle.border(bodyWidth));
+				rendered.push(overlayStyle.title(`${basename(doc.path)}  ${relative(ctx.cwd, doc.path)}`, bodyWidth));
+				if (doc.truncated) rendered.push(overlayStyle.muted(`truncated at ${Math.round(MAX_FILE_BYTES / 1024)}KB`, bodyWidth));
 				const size = pageSize();
 				const visible = lines.slice(top, top + size);
 				for (const line of visible) {
-					c.addChild(new Text(overlayStyle.line(truncateToWidth(renderMarkdownLine(line || " "), bodyWidth), bodyWidth)));
+					rendered.push(overlayStyle.line(truncateToWidth(renderMarkdownLine(line || " "), bodyWidth), bodyWidth));
 				}
-				for (let i = visible.length; i < size; i++) c.addChild(new Text(overlayStyle.line("", bodyWidth)));
-				c.addChild(new Text(overlayStyle.muted(`${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • pageUp/pageDown • esc close`, bodyWidth)));
-				c.addChild(new Text(overlayStyle.border(bodyWidth)));
-				return c.render(width);
+				for (let i = visible.length; i < size; i++) rendered.push(overlayStyle.line("", bodyWidth));
+				rendered.push(overlayStyle.muted(`${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • pageUp/pageDown • esc close`, bodyWidth));
+				rendered.push(overlayStyle.border(bodyWidth));
+				return rendered;
 			},
 			invalidate: () => {},
 			handleInput: (data: string) => {

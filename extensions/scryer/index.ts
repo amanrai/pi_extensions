@@ -664,18 +664,18 @@ async function showScrollableModal(ctx: ExtensionContext, title: string, lines: 
 		return {
 			render: (width: number) => {
 				clamp();
-				const c = new Container();
 				const panelWidth = Math.max(20, width - 2);
-				c.addChild(new Text(overlayStyle.border(panelWidth)));
-				c.addChild(new Text(overlayStyle.title(title, panelWidth)));
-				if (subtitle) c.addChild(new Text(overlayStyle.muted(subtitle, panelWidth)));
+				const rendered: string[] = [];
+				rendered.push(overlayStyle.border(panelWidth));
+				rendered.push(overlayStyle.title(title, panelWidth));
+				if (subtitle) rendered.push(overlayStyle.muted(subtitle, panelWidth));
 				const size = pageSize();
 				const visible = lines.slice(top, top + size);
-				for (const line of visible) c.addChild(new Text(overlayStyle.line(truncateToWidth(line || " ", panelWidth), panelWidth)));
-				for (let i = visible.length; i < size; i++) c.addChild(new Text(overlayStyle.line("", panelWidth)));
-				c.addChild(new Text(overlayStyle.muted(`${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • esc close`, panelWidth)));
-				c.addChild(new Text(overlayStyle.border(panelWidth)));
-				return c.render(width);
+				for (const line of visible) rendered.push(overlayStyle.line(truncateToWidth(line || " ", panelWidth), panelWidth));
+				for (let i = visible.length; i < size; i++) rendered.push(overlayStyle.line("", panelWidth));
+				rendered.push(overlayStyle.muted(`${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • esc close`, panelWidth));
+				rendered.push(overlayStyle.border(panelWidth));
+				return rendered;
 			},
 			invalidate: () => {},
 			handleInput: (data: string) => {
@@ -696,9 +696,7 @@ async function showScrollableModal(ctx: ExtensionContext, title: string, lines: 
 async function showTouched(ctx: ExtensionContext) {
 	state ??= activePi ? await loadState(activePi, ctx) : state;
 	const rows = await collectTouchedCommits(ctx);
-	const markdown = touchedMarkdown(rows);
-	await updateDailyTouchedSection(ctx, markdown);
-	await showScrollableModal(ctx, "Touched this session", groupedTouchedLines(rows), "Grouped by repo; Daily was updated");
+	await showScrollableModal(ctx, "Touched this session", groupedTouchedLines(rows), "Grouped by repo; local display only");
 }
 
 async function showCockpit(ctx: ExtensionContext) {
