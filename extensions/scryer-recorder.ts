@@ -743,7 +743,7 @@ function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 	const prefix = scryerBusy ? `BUSY — ${line}` : line;
 	foregroundStepUpdate?.(prefix);
 	ctx.ui.setStatus("scryer-recorder", prefix);
-	ctx.ui.setWidget("scryer-recorder", saveDestinationLines(prefix), { placement: "belowEditor" });
+	if (!foregroundStepUpdate) ctx.ui.setWidget("scryer-recorder", saveDestinationLines(prefix), { placement: "belowEditor" });
 	(ctx.ui as any).setWorkingVisible?.(true);
 	(ctx.ui as any).setWorkingMessage?.(`Scryer: ${line}`);
 	(ctx.ui as any).setWorkingIndicator?.({ frames: ["·", "•", "●", "•"], intervalMs: 120 });
@@ -798,7 +798,6 @@ async function foregroundScryer(ctx: ExtensionContext, label: string, fn: () => 
 				c.addChild(new Text(`  ${step}`, 1, 0));
 				for (const line of saveDestinationLines(step).slice(1)) c.addChild(new Text(theme.fg("muted", line), 1, 0));
 				if (queuedInputs.length) c.addChild(new Text(theme.fg("warning", `  Queued messages → ${queuedInputs.length}`), 1, 0));
-				c.addChild(new Text(theme.fg("dim", "  Input is held until this completes."), 1, 0));
 				c.addChild(new DynamicBorder(borderColor));
 				return c.render(w);
 			},
