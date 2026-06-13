@@ -61,6 +61,7 @@ let recentTools: ToolEvent[] = [];
 let recentUserPrompts: string[] = [];
 let scryerBusy: { label: string; startedAt: number } | undefined;
 let queuedInputs: Array<{ text: string; images?: any[] }> = [];
+let deetsTimer: NodeJS.Timeout | undefined;
 
 function today(): string {
 	return new Date().toISOString().slice(0, 10);
@@ -728,11 +729,17 @@ function setRecorderProgress(ctx: ExtensionContext, line?: string) {
 	if (!line) {
 		ctx.ui.setStatus("scryer-recorder", undefined);
 		ctx.ui.setWidget("scryer-recorder", undefined);
+		(ctx.ui as any).setWorkingMessage?.();
+		(ctx.ui as any).setWorkingIndicator?.();
+		(ctx.ui as any).setWorkingVisible?.(true);
 		return;
 	}
 	const prefix = scryerBusy ? `BUSY — ${line}` : line;
 	ctx.ui.setStatus("scryer-recorder", prefix);
 	ctx.ui.setWidget("scryer-recorder", saveDestinationLines(prefix), { placement: "belowEditor" });
+	(ctx.ui as any).setWorkingVisible?.(true);
+	(ctx.ui as any).setWorkingMessage?.(`Scryer: ${line}`);
+	(ctx.ui as any).setWorkingIndicator?.({ frames: ["·", "•", "●", "•"], intervalMs: 120 });
 }
 
 async function flushQueuedInputs() {
@@ -857,6 +864,10 @@ export default function (pi: ExtensionAPI) {
 		activeCtx = ctx;
 		state = await loadState(pi, ctx);
 		state.lastActivityAt = Date.now();
+		if (ctx.hasUI) {
+			ctx.ui.setWidget("scryer-recorder", undefined);
+			ctx.ui.setWidget("scryer-recorder-deets", undefined);
+		}
 		await saveState();
 	});
 
@@ -869,6 +880,8 @@ export default function (pi: ExtensionAPI) {
 				...saveDestinationLines(`BUSY — ${scryerBusy.label}`),
 				`  Queued messages → ${queuedInputs.length}`,
 			], { placement: "belowEditor" });
+			(ctx.ui as any).setWorkingVisible?.(true);
+			(ctx.ui as any).setWorkingMessage?.(`Scryer busy — queued ${queuedInputs.length} message${queuedInputs.length === 1 ? "" : "s"}`);
 		}
 		return { action: "handled" as const };
 	});
@@ -958,8 +971,13 @@ export default function (pi: ExtensionAPI) {
 				activeCtx = ctx;
 				state ??= await loadState(pi, ctx);
 				if (ctx.hasUI) {
-					ctx.ui.setWidget("scryer-recorder-deets", deetsLines(), { placement: "belowEditor" });
+					if (deetsTimer) clearTimeout(deetsTimer);
+					ctx.ui.setWidget("scryer-recorder-deets", undefined);
+					ctx.ui.setWidget("scryer-recorder", deetsLines(), { placement: "belowEditor" });
 					ctx.ui.notify(`${state.activeProjectName ?? "No project"} / ${state.activeTaskTitle ?? "No ticket"}`, "info");
+					deetsTimer = setTimeout(() => {
+						if (!scryerBusy) ctx.ui.setWidget("scryer-recorder", undefined);
+					}, 15_000);
 				}
 			} catch (err: any) {
 				if (ctx.hasUI) ctx.ui.notify(`Scryer deets failed: ${err?.message ?? err}`, "error");
