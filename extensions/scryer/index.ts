@@ -32,6 +32,7 @@ let foregroundStepUpdate: ((line: string) => void) | undefined;
 let foregroundPlan: Array<{ label: string; match: RegExp }> = [];
 let foregroundStepIndex = 0;
 let pendingSave: { reason: string; ctx: ExtensionContext; endSession: boolean } | undefined;
+let contextGateBusy = false;
 const widgetTimers = new Map<string, NodeJS.Timeout>();
 
 function setTransientWidget(ctx: ExtensionContext, key: string, lines: string[], options?: any, ttlMs = 30_000) {
@@ -250,9 +251,39 @@ async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 	return true;
 }
 
+function hasScryerContextDecision(): boolean {
+	if (!state) return false;
+	if (state.noProjectForSession) return true;
+	if (!state.activeProjectId) return false;
+	return Boolean(state.activeTaskId || state.noTicketForSession);
+}
+
+async function ensureScryerContext(ctx: ExtensionContext, source: "startup" | "input" = "input"): Promise<boolean> {
+	if (!state || !ctx.hasUI || ctx.mode !== "tui") return true;
+	if (hasScryerContextDecision()) return true;
+	if (contextGateBusy) return false;
+	contextGateBusy = true;
+	try {
+		if (!(await ensurePmReachable(ctx, state, saveState))) {
+			ctx.ui.notify("Scryer context gate deferred — PM system unavailable", "warning");
+			return true;
+		}
+		if (source === "startup") ctx.ui.notify("Choose Scryer context for this Pi session", "info");
+		if (!state.activeProjectId && !state.noProjectForSession) await pickActiveProject(ctx);
+		if (state.activeProjectId && !state.activeTaskId && !state.noTicketForSession) await pickActiveTicket(ctx);
+		if (!hasScryerContextDecision()) {
+			ctx.ui.notify("Scryer context still missing — pick a ticket/project or consciously skip", "warning");
+			return false;
+		}
+		return true;
+	} finally {
+		contextGateBusy = false;
+	}
+}
+
 async function chooseActiveProjectAndTask(ctx: ExtensionContext) {
-	if (!state || state.activeProjectId || state.noProjectForSession || !ctx.hasUI) return;
-	if (await pickActiveProject(ctx)) await pickActiveTicket(ctx);
+	if (!state || hasScryerContextDecision() || !ctx.hasUI) return;
+	await ensureScryerContext(ctx, "input");
 }
 
 async function dailyTargetProject(): Promise<any> {
@@ -944,9 +975,12 @@ export default function (pi: ExtensionAPI) {
 			ctx.ui.setWidget("scryer-recorder-deets", undefined);
 		}
 		await saveState(state);
+		await ensureScryerContext(ctx, "startup");
 	});
 
 	pi.on("input", async (event, ctx) => {
+		state ??= await loadState(pi, ctx);
+		if (!scryerBusy && !(await ensureScryerContext(ctx, "input"))) return { action: "handled" as const };
 		if (!scryerBusy) return { action: "continue" as const };
 		queuedInputs.push({ text: event.text, images: event.images as any });
 		if (ctx.hasUI) {
