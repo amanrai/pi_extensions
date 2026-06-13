@@ -1,11 +1,11 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 const RESET = "\x1b[0m";
-const BG = "\x1b[48;2;45;55;72m";
-const FG = "\x1b[38;5;255m";
-const MUTED = "\x1b[38;5;250m";
-const CYAN = "\x1b[38;5;81m";
-const AMBER = "\x1b[38;5;220m";
+const BG = "\x1b[48;2;255;255;255m";
+const FG = "\x1b[38;2;24;24;27m";
+const MUTED = "\x1b[38;2;82;82;91m";
+const CYAN = "\x1b[38;2;8;145;178m";
+const AMBER = "\x1b[38;2;180;83;9m";
 const BOLD = "\x1b[1m";
 
 function padAnsi(s: string, width: number): string {
