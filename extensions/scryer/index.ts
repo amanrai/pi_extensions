@@ -639,7 +639,9 @@ async function showScrollableModal(ctx: ExtensionContext, title: string, lines: 
 				c.addChild(new Text(overlayStyle.title(title, panelWidth)));
 				if (subtitle) c.addChild(new Text(overlayStyle.muted(subtitle, panelWidth)));
 				const size = pageSize();
-				for (const line of lines.slice(top, top + size)) c.addChild(new Text(overlayStyle.line(truncateToWidth(line || " ", panelWidth), panelWidth)));
+				const visible = lines.slice(top, top + size);
+				for (const line of visible) c.addChild(new Text(overlayStyle.line(truncateToWidth(line || " ", panelWidth), panelWidth)));
+				for (let i = visible.length; i < size; i++) c.addChild(new Text(overlayStyle.line("", panelWidth)));
 				c.addChild(new Text(overlayStyle.muted(`${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • esc close`, panelWidth)));
 				c.addChild(new Text(overlayStyle.border(panelWidth)));
 				return c.render(width);

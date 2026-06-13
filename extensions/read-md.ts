@@ -114,9 +114,11 @@ async function showMarkdown(ctx: ExtensionContext, file: string) {
 				c.addChild(new Text(overlayStyle.title(`${basename(doc.path)}  ${relative(ctx.cwd, doc.path)}`, bodyWidth)));
 				if (doc.truncated) c.addChild(new Text(overlayStyle.muted(`truncated at ${Math.round(MAX_FILE_BYTES / 1024)}KB`, bodyWidth)));
 				const size = pageSize();
-				for (const line of lines.slice(top, top + size)) {
+				const visible = lines.slice(top, top + size);
+				for (const line of visible) {
 					c.addChild(new Text(overlayStyle.line(truncateToWidth(renderMarkdownLine(line || " ", theme), bodyWidth), bodyWidth)));
 				}
+				for (let i = visible.length; i < size; i++) c.addChild(new Text(overlayStyle.line("", bodyWidth)));
 				c.addChild(new Text(overlayStyle.muted(`${top + 1}-${Math.min(lines.length, top + size)} / ${lines.length}  ↑↓ scroll • pageUp/pageDown • esc close`, bodyWidth)));
 				c.addChild(new Text(overlayStyle.border(bodyWidth)));
 				return c.render(width);
