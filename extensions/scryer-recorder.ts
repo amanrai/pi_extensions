@@ -722,6 +722,10 @@ function deetsLines(): string[] {
 	];
 }
 
+function deetsMarkdown(): string {
+	return deetsLines().join("\n");
+}
+
 function saveDestinationLines(line: string): string[] {
 	return [
 		`▸ Scryer recorder: ${line}`,
@@ -1012,6 +1016,20 @@ export default function (pi: ExtensionAPI) {
 			try {
 				activeCtx = ctx;
 				state ??= await loadState(pi, ctx);
+				const markdown = deetsMarkdown();
+				pi.sendMessage({
+					customType: "scryer-deets",
+					content: markdown,
+					display: true,
+					details: {
+						projectId: state.activeProjectId,
+						projectName: state.activeProjectName,
+						taskId: state.activeTaskId,
+						taskTitle: state.activeTaskTitle,
+						dailyTaskId: state.ticketId,
+						dailyProjectId: state.ticketProjectId,
+					},
+				}, { deliverAs: "nextTurn" });
 				if (ctx.hasUI) {
 					if (deetsTimer) clearTimeout(deetsTimer);
 					ctx.ui.setWidget("scryer-recorder-deets", undefined);
