@@ -32,4 +32,4 @@ Reload in pi:
 
 ## Notes
 
-`starship-footer.ts` expects `starship` in PATH. It uses `gh` when available to show the current branch PR number.
+`starship-footer.ts` expects `starship` in PATH. It uses `gh` when available to show the current branch PR number, and shows the active work repo's latest commit.
