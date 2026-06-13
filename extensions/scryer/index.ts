@@ -3,57 +3,14 @@ import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import { Container, Text } from "@earendil-works/pi-tui";
-import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
-import { homedir } from "node:os";
-
-const PM_URL = process.env.SCRYER_PM_URL ?? "http://127.0.0.1:43210";
-const DAILIES_SLUG = process.env.SCRYER_DAILIES_SLUG ?? "dailies";
-const OUTPUT_TOKEN_THRESHOLD = Number(process.env.SCRYER_RECORDER_OUTPUT_TOKEN_THRESHOLD ?? 50_000);
-const IDLE_MS = Number(process.env.SCRYER_RECORDER_IDLE_MS ?? 10 * 60 * 1000);
-const NEW_DAILY_HOURS = Number(process.env.SCRYER_RECORDER_NEW_DAILY_HOURS ?? 3);
-const SAVE_COOLDOWN_MS = Number(process.env.SCRYER_RECORDER_SAVE_COOLDOWN_MS ?? 30 * 60 * 1000);
-const RECORDER_DIR = join(homedir(), ".pi", "agent", "scryer-recorder");
-const STATE_DIR = join(RECORDER_DIR, "state");
-const OUTBOX_DIR = join(RECORDER_DIR, "outbox");
-const SUMMARIES_DIR = join(RECORDER_DIR, "summaries");
-
-type RecorderState = {
-	sessionKey: string;
-	sessionName: string;
-	cwd: string;
-	cwdTag: string;
-	currentDate?: string;
-	ticketId?: string;
-	ticketProjectId?: string;
-	ticketProjectName?: string;
-	ticketTitle?: string;
-	lastSummaryAt?: number;
-	lastSaveAt?: number;
-	lastUpdateAt?: number;
-	lastSaveReason?: string;
-	lastSaveAttemptAt?: number;
-	lastActivityAt?: number;
-	lastPmPromptAt?: number;
-	outputTokensSinceSummary: number;
-	summary: string;
-	finalized?: boolean;
-	activeProjectId?: string;
-	activeProjectName?: string;
-	activeTaskId?: string;
-	activeTaskTitle?: string;
-	noProjectForSession?: boolean;
-	noTicketForSession?: boolean;
-};
-
-type ToolEvent = {
-	name: string;
-	input?: unknown;
-	ok?: boolean;
-	error?: string;
-};
+import { DAILIES_SLUG, IDLE_MS, OUTPUT_TOKEN_THRESHOLD, OUTBOX_DIR, SAVE_COOLDOWN_MS, SUMMARIES_DIR, NEW_DAILY_HOURS, PM_URL } from "./config.ts";
+import type { RecorderState, ToolEvent } from "./types.ts";
+import { api, ensurePmReachable, findDailiesProject, findWorkTaskType, getTicket } from "./api.ts";
+import { displayPath, loadState, saveState, today } from "./state.ts";
+import { projectLabel, projectScore, repoContext } from "./repo.ts";
+import { contentText, summaryPrompt, updateTicketPrompt } from "./prompts.ts";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 let state: RecorderState | undefined;
 let idleTimer: NodeJS.Timeout | undefined;
@@ -65,186 +22,6 @@ let scryerBusy: { label: string; startedAt: number } | undefined;
 let queuedInputs: Array<{ text: string; images?: any[] }> = [];
 let deetsTimer: NodeJS.Timeout | undefined;
 let foregroundStepUpdate: ((line: string) => void) | undefined;
-
-function today(): string {
-	return new Date().toISOString().slice(0, 10);
-}
-
-function displayPath(path: string): string {
-	const home = homedir();
-	return path.startsWith(home) ? `~${path.slice(home.length)}` : path;
-}
-
-function sessionKey(ctx: ExtensionContext): string {
-	const file = ctx.sessionManager.getSessionFile?.();
-	if (file) return createHash("sha1").update(file).digest("hex");
-	return createHash("sha1").update(`${ctx.cwd}:${Date.now()}`).digest("hex");
-}
-
-function isUglySessionName(name: string): boolean {
-	return /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}/.test(name) || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i.test(name);
-}
-
-function generatedSessionName(ctx: ExtensionContext): string {
-	const cwdName = basename(ctx.cwd || process.cwd()) || "pi-session";
-	const stamp = new Date().toLocaleString(undefined, {
-		month: "short",
-		day: "numeric",
-		hour: "numeric",
-		minute: "2-digit",
-	});
-	return `${cwdName} — ${stamp}`;
-}
-
-function sessionName(pi: ExtensionAPI, ctx: ExtensionContext): string {
-	const current = pi.getSessionName?.();
-	if (current && !isUglySessionName(current)) return current;
-	const generated = generatedSessionName(ctx);
-	pi.setSessionName?.(generated);
-	return generated;
-}
-
-async function readJson<T>(path: string): Promise<T | undefined> {
-	try {
-		return JSON.parse(await readFile(path, "utf8")) as T;
-	} catch {
-		return undefined;
-	}
-}
-
-async function writeJson(path: string, value: unknown) {
-	await mkdir(join(path, ".."), { recursive: true });
-	await writeFile(path, JSON.stringify(value, null, 2));
-}
-
-function statePath(key: string): string {
-	return join(STATE_DIR, `${key}.json`);
-}
-
-async function loadState(pi: ExtensionAPI, ctx: ExtensionContext): Promise<RecorderState> {
-	const key = sessionKey(ctx);
-	const name = sessionName(pi, ctx);
-	const existing = await readJson<RecorderState>(statePath(key));
-	if (existing) {
-		if (!existing.sessionName || isUglySessionName(existing.sessionName)) existing.sessionName = name;
-		return existing;
-	}
-	const cwd = ctx.cwd || process.cwd();
-	return {
-		sessionKey: key,
-		sessionName: name,
-		cwd,
-		cwdTag: `cwd:${displayPath(cwd)}`,
-		outputTokensSinceSummary: 0,
-		summary: "",
-	};
-}
-
-async function saveState() {
-	if (!state) return;
-	await mkdir(STATE_DIR, { recursive: true });
-	await writeFile(statePath(state.sessionKey), JSON.stringify(state, null, 2));
-}
-
-async function api(path: string, init?: RequestInit): Promise<any> {
-	const res = await fetch(`${PM_URL}${path}`, {
-		...init,
-		headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-	});
-	const text = await res.text();
-	if (!res.ok) throw new Error(`PM API ${res.status}: ${text}`);
-	return text ? JSON.parse(text) : undefined;
-}
-
-async function pmReachable(): Promise<boolean> {
-	try {
-		await api("/healthz");
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function runScryerUp(): Promise<void> {
-	return new Promise((resolve, reject) => {
-		execFile("scryer", ["up", "--no-open"], (error) => error ? reject(error) : resolve());
-	});
-}
-
-async function ensurePm(ctx: ExtensionContext): Promise<boolean> {
-	if (await pmReachable()) return true;
-	if (!state) return false;
-	const now = Date.now();
-	if ((state.lastPmPromptAt ?? 0) + 60 * 60 * 1000 > now) return false;
-	state.lastPmPromptAt = now;
-	await saveState();
-	if (!ctx.hasUI) return false;
-	const ok = await ctx.ui.confirm("PM system is not reachable", "Start Scryer with `scryer up --no-open`?");
-	if (!ok) return false;
-	try {
-		await runScryerUp();
-		return await pmReachable();
-	} catch (err: any) {
-		ctx.ui.notify(`Could not start Scryer: ${err?.message ?? err}`, "warning");
-		return false;
-	}
-}
-
-async function findDailiesProject(): Promise<any> {
-	const projects = await api("/api/projects");
-	const found = projects.find((p: any) => p.slug === DAILIES_SLUG || String(p.name).toLowerCase() === DAILIES_SLUG);
-	if (!found) throw new Error(`Dailies project not found: ${DAILIES_SLUG}`);
-	return found;
-}
-
-async function findWorkTaskType(projectId: string): Promise<string> {
-	const types = await api(`/api/task-types?project_id=${encodeURIComponent(projectId)}`);
-	return (types.find((t: any) => t.key === "work") ?? types[0]).id;
-}
-
-function execGit(args: string[], cwd: string): Promise<string | undefined> {
-	return new Promise((resolve) => {
-		execFile("git", args, { cwd, timeout: 5_000 }, (error, stdout) => resolve(error ? undefined : stdout.trim()));
-	});
-}
-
-function normalizeRepoUrl(value?: string | null): string {
-	return String(value ?? "")
-		.trim()
-		.replace(/^git@([^:]+):/, "https://$1/")
-		.replace(/\.git$/, "")
-		.replace(/\/$/, "")
-		.toLowerCase();
-}
-
-async function repoContext(ctx: ExtensionContext) {
-	const cwd = state?.cwd || ctx.cwd || process.cwd();
-	const gitRoot = await execGit(["rev-parse", "--show-toplevel"], cwd);
-	const root = gitRoot || cwd;
-	const remote = gitRoot ? await execGit(["remote", "get-url", "origin"], root) : undefined;
-	return { cwd, root, remote, rootName: basename(root) };
-}
-
-function projectScore(project: any, repo: Awaited<ReturnType<typeof repoContext>>): number {
-	let score = 0;
-	const remote = normalizeRepoUrl(repo.remote);
-	const projectRemote = normalizeRepoUrl(project.remote_repo_url);
-	if (remote && projectRemote && remote === projectRemote) score += 100;
-	const rel = String(project.relative_repo_path ?? "").replace(/^\/+|\/+$/g, "");
-	if (rel && (repo.root.endsWith(`/${rel}`) || repo.cwd.endsWith(`/${rel}`))) score += 60;
-	const name = String(project.name ?? "").toLowerCase();
-	const slug = String(project.slug ?? "").toLowerCase();
-	const rootName = repo.rootName.toLowerCase();
-	if (rootName && (name === rootName || slug === rootName)) score += 25;
-	if (rootName && (name.includes(rootName) || slug.includes(rootName) || rootName.includes(slug))) score += 10;
-	return score;
-}
-
-function projectLabel(project: any, score?: number): string {
-	const repo = project.remote_repo_url || project.relative_repo_path;
-	const suffix = score ? ` · match ${score}` : "";
-	return `${project.name} (${project.slug})${repo ? ` · ${repo}` : ""}${suffix}`;
-}
 
 async function pickActiveProject(ctx: ExtensionContext): Promise<boolean> {
 	if (!state || !ctx.hasUI) return false;
@@ -275,7 +52,7 @@ async function pickActiveProject(ctx: ExtensionContext): Promise<boolean> {
 		state.activeTaskTitle = undefined;
 		state.noProjectForSession = true;
 		state.noTicketForSession = true;
-		await saveState();
+		await saveState(state);
 		ctx.ui.notify("Scryer recorder: continuing without a project for this session", "info");
 		return false;
 	}
@@ -294,7 +71,7 @@ async function pickActiveProject(ctx: ExtensionContext): Promise<boolean> {
 	state.activeTaskTitle = undefined;
 	state.noProjectForSession = false;
 	state.noTicketForSession = false;
-	await saveState();
+	await saveState(state);
 	ctx.ui.notify(`Scryer recorder project: ${project.name}`, "info");
 	return true;
 }
@@ -331,7 +108,7 @@ async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 		state.activeTaskId = undefined;
 		state.activeTaskTitle = undefined;
 		state.noTicketForSession = true;
-		await saveState();
+		await saveState(state);
 		ctx.ui.notify(`Scryer recorder: ${state.activeProjectName}, no active ticket`, "info");
 		return false;
 	}
@@ -369,7 +146,7 @@ async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 		state.activeTaskTitle = task.title;
 	}
 	state.noTicketForSession = false;
-	await saveState();
+	await saveState(state);
 	ctx.ui.notify(`Scryer recorder ticket: ${state.activeTaskTitle}`, "info");
 	return true;
 }
@@ -377,15 +154,6 @@ async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 async function chooseActiveProjectAndTask(ctx: ExtensionContext) {
 	if (!state || state.activeProjectId || state.noProjectForSession || !ctx.hasUI) return;
 	if (await pickActiveProject(ctx)) await pickActiveTicket(ctx);
-}
-
-async function getTicket(ticketId: string): Promise<any | undefined> {
-	try {
-		return await api(`/api/tasks/${ticketId}`);
-	} catch (err: any) {
-		if (String(err?.message ?? err).includes("404")) return undefined;
-		throw err;
-	}
 }
 
 async function dailyTargetProject(): Promise<any> {
@@ -415,7 +183,7 @@ async function ensureTicket(finalizePrevious = true): Promise<string> {
 			state.ticketTitle = existing.title;
 			state.ticketProjectId = project.id;
 			state.ticketProjectName = project.name;
-			await saveState();
+			await saveState(state);
 			return state.ticketId;
 		}
 		state.ticketId = undefined;
@@ -452,49 +220,8 @@ async function ensureTicket(finalizePrevious = true): Promise<string> {
 	state.ticketProjectName = project.name;
 	state.currentDate = nowDate;
 	state.finalized = false;
-	await saveState();
+	await saveState(state);
 	return task.id;
-}
-
-function contentText(content: unknown): string {
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	return content.map((part: any) => part?.text ?? "").filter(Boolean).join("\n");
-}
-
-function buildConversationText(ctx: ExtensionContext): string {
-	const entries = ctx.sessionManager.getBranch();
-	const sections: string[] = [];
-	for (const entry of entries.slice(-80) as any[]) {
-		if (entry.type !== "message" || !entry.message?.role) continue;
-		if (!["user", "assistant", "toolResult"].includes(entry.message.role)) continue;
-		const text = contentText(entry.message.content).trim();
-		if (text) sections.push(`${entry.message.role.toUpperCase()}:\n${text}`);
-	}
-	return sections.join("\n\n");
-}
-
-function summaryPrompt(ctx: ExtensionContext, reason: string, endSession: boolean): string {
-	const toolLines = recentTools.slice(-40).map((t) => `- ${t.name}: ${t.ok === false ? "failed" : "used"}${t.error ? ` (${t.error})` : ""}`);
-	return [
-		"Update the rolling work summary for this Pi coding session.",
-		"Be concise but include narrative plus tool details, files touched, commands run, decisions, current state, and next steps.",
-		endSession ? "This is an end-of-session summary. Capture final state clearly." : "This is a rolling summary update.",
-		`Reason: ${reason}`,
-		`CWD: ${state?.cwd ?? ctx.cwd}`,
-		"",
-		"Existing summary:",
-		state?.summary || "(none)",
-		"",
-		"Recent user prompts:",
-		...recentUserPrompts.slice(-12).map((p) => `- ${p.replace(/\s+/g, " ").slice(0, 300)}`),
-		"",
-		"Recent tool activity:",
-		...(toolLines.length ? toolLines : ["- none recorded"]),
-		"",
-		"Recent conversation:",
-		buildConversationText(ctx),
-	].join("\n");
 }
 
 async function completeText(ctx: ExtensionContext, prompt: string): Promise<string> {
@@ -510,7 +237,7 @@ async function completeText(ctx: ExtensionContext, prompt: string): Promise<stri
 }
 
 async function generateSummary(ctx: ExtensionContext, reason: string, endSession: boolean): Promise<string> {
-	return completeText(ctx, summaryPrompt(ctx, reason, endSession));
+	return completeText(ctx, summaryPrompt(ctx, reason, endSession, state, recentTools, recentUserPrompts));
 }
 
 async function writeOutbox(reason: string, summary: string, endSession: boolean) {
@@ -570,28 +297,6 @@ async function patchActiveTask(summary: string) {
 	}
 }
 
-function updateTicketPrompt(ctx: ExtensionContext, task: any): string {
-	return [
-		"Revise the existing Scryer ticket description to reflect the current Pi session state.",
-		"Do not produce a separate status report. Return ONLY the full replacement markdown for the ticket description.",
-		"Preserve useful existing structure and decisions. Merge in new facts, current state, files touched, and next steps.",
-		"Remove stale claims only when contradicted by the session.",
-		`Ticket: ${task.title} [${task.status}]`,
-		"",
-		"Existing ticket description:",
-		String(task.description_md ?? ""),
-		"",
-		"Recent user prompts:",
-		...recentUserPrompts.slice(-12).map((p) => `- ${p.replace(/\s+/g, " ").slice(0, 300)}`),
-		"",
-		"Recent tool activity:",
-		...(recentTools.slice(-40).map((t) => `- ${t.name}: ${t.ok === false ? "failed" : "used"}${t.error ? ` (${t.error})` : ""}`) || ["- none recorded"]),
-		"",
-		"Recent conversation:",
-		buildConversationText(ctx),
-	].join("\n");
-}
-
 async function reviseActiveTaskFromCurrentState(ctx: ExtensionContext): Promise<boolean> {
 	if (!state?.activeTaskId) return false;
 	setRecorderProgress(ctx, "reading active work ticket…");
@@ -599,18 +304,18 @@ async function reviseActiveTaskFromCurrentState(ctx: ExtensionContext): Promise<
 	if (!task) {
 		state.activeTaskId = undefined;
 		state.activeTaskTitle = undefined;
-		await saveState();
+		await saveState(state);
 		return false;
 	}
 	state.activeTaskTitle = task.title;
 	setRecorderProgress(ctx, "generating ticket update from current session…");
-	const revised = await completeText(ctx, updateTicketPrompt(ctx, task));
+	const revised = await completeText(ctx, updateTicketPrompt(ctx, task, recentTools, recentUserPrompts));
 	setRecorderProgress(ctx, "writing active work ticket…");
 	await patchActiveTask(revised);
 	state.summary = revised;
 	state.lastSummaryAt = Date.now();
 	state.lastUpdateAt = Date.now();
-	await saveState();
+	await saveState(state);
 	return true;
 }
 
@@ -673,7 +378,7 @@ async function addActiveTaskComment(ctx: ExtensionContext) {
 	await commentOnActiveTask(summary);
 	state.summary = summary;
 	state.lastSummaryAt = Date.now();
-	await saveState();
+	await saveState(state);
 	if (ctx.hasUI) ctx.ui.notify(`Added comment to ticket: ${activeTargetLabel()}`, "info");
 }
 
@@ -832,13 +537,13 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 			return;
 		}
 		state.lastSaveAttemptAt = Date.now();
-		await saveState();
+		await saveState(state);
 
 		setRecorderProgress(ctx, "checking Scryer destination…");
-		const pmAvailable = await ensurePm(ctx);
+		const pmAvailable = await ensurePmReachable(ctx, state, saveState);
 		if (pmAvailable) {
 			await chooseActiveProjectAndTask(ctx);
-			await saveState();
+			await saveState(state);
 		}
 
 		setRecorderProgress(ctx, `saving (${reason}): summarizing with active model…`);
@@ -879,7 +584,7 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 		state.lastSaveReason = reason;
 		state.lastActivityAt = Date.now();
 		state.outputTokensSinceSummary = 0;
-		await saveState();
+		await saveState(state);
 		if (ctx.hasUI) ctx.ui.notify(`Scryer recorder saved summary (${reason}). ${destinationSummary()}`, "info");
 	} finally {
 		if (ownsBusy) {
@@ -914,7 +619,7 @@ export default function (pi: ExtensionAPI) {
 			ctx.ui.setWidget("scryer-recorder", undefined);
 			ctx.ui.setWidget("scryer-recorder-deets", undefined);
 		}
-		await saveState();
+		await saveState(state);
 	});
 
 	pi.on("input", async (event, ctx) => {
@@ -939,7 +644,7 @@ export default function (pi: ExtensionAPI) {
 		recentUserPrompts.push(event.prompt ?? "");
 		if (recentUserPrompts.length > 30) recentUserPrompts = recentUserPrompts.slice(-30);
 		if (idleTimer) clearTimeout(idleTimer);
-		await saveState();
+		await saveState(state);
 	});
 
 	pi.on("tool_call", async (event) => {
@@ -960,7 +665,7 @@ export default function (pi: ExtensionAPI) {
 		state ??= await loadState(pi, ctx);
 		state.outputTokensSinceSummary += outputTokens(event.message as AssistantMessage);
 		state.lastActivityAt = Date.now();
-		await saveState();
+		await saveState(state);
 		if (state.outputTokensSinceSummary >= OUTPUT_TOKEN_THRESHOLD) {
 			await summarizeAndPersist("output-token-threshold", ctx, false);
 		}
@@ -970,13 +675,13 @@ export default function (pi: ExtensionAPI) {
 		activeCtx = ctx;
 		state ??= await loadState(pi, ctx);
 		state.lastActivityAt = Date.now();
-		await saveState();
+		await saveState(state);
 		scheduleIdle(ctx);
 	});
 
 	pi.on("session_shutdown", async () => {
 		if (idleTimer) clearTimeout(idleTimer);
-		await saveState();
+		await saveState(state);
 	});
 
 	const register = (name: string, description: string, handler: (ctx: ExtensionContext) => Promise<void>) => {
@@ -986,7 +691,7 @@ export default function (pi: ExtensionAPI) {
 				try {
 					activeCtx = ctx;
 					state ??= await loadState(pi, ctx);
-					if (!(await ensurePm(ctx))) return;
+					if (!(await ensurePmReachable(ctx, state, saveState))) return;
 					await handler(ctx);
 				} catch (err: any) {
 					if (ctx.hasUI) ctx.ui.notify(`Scryer recorder ${name} failed: ${err?.message ?? err}`, "error");
