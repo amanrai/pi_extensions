@@ -693,12 +693,6 @@ async function showScrollableModal(ctx: ExtensionContext, title: string, lines: 
 	}, { overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } });
 }
 
-async function showTouched(ctx: ExtensionContext) {
-	state ??= activePi ? await loadState(activePi, ctx) : state;
-	const rows = await collectTouchedCommits(ctx);
-	await showScrollableModal(ctx, "Touched this session", groupedTouchedLines(rows), "Grouped by repo; local display only");
-}
-
 async function showCockpit(ctx: ExtensionContext) {
 	state ??= activePi ? await loadState(activePi, ctx) : state;
 	const rows = await collectTouchedCommits(ctx);
@@ -715,13 +709,13 @@ async function showCockpit(ctx: ExtensionContext) {
 		"",
 		...groupedTouchedLines(rows),
 	];
-	await showScrollableModal(ctx, "Session cockpit", lines, "Scryer context, touchlog, and queue state");
+	await showScrollableModal(ctx, "Session cockpit", lines);
 }
 
 function showCompletion(ctx: ExtensionContext, kind: "save" | "update") {
 	const lines = kind === "update"
 		? ["✓ Ticket read", "✓ Update generated", `✓ Work ticket updated: ${activeWorkLabel()}`]
-		: ["✓ Summary generated", `✓ Daily updated: ${dailyProjectLabel()} / ${dailyTicketLabel()}`, state?.activeTaskId ? `✓ Work ticket updated: ${activeWorkLabel()}` : "○ No active work ticket", "✓ Touchlog available via /touched"];
+		: ["✓ Summary generated", `✓ Daily updated: ${dailyProjectLabel()} / ${dailyTicketLabel()}`, state?.activeTaskId ? `✓ Work ticket updated: ${activeWorkLabel()}` : "○ No active work ticket", "✓ Touchlog available in /cockpit"];
 	setTransientWidget(ctx, "scryer-complete", [kind === "update" ? "Scryer update complete" : "Scryer save complete", ...lines], { placement: "belowEditor" });
 }
 
@@ -969,7 +963,6 @@ export default function (pi: ExtensionAPI) {
 		state.lastActivityAt = Date.now();
 		if (ctx.hasUI) {
 			clearTransientWidget(ctx, "scryer-recorder");
-			clearTransientWidget(ctx, "scryer-touched");
 			ctx.ui.setWidget("scryer-recorder-deets", undefined);
 		}
 		await saveState(state);
@@ -1079,8 +1072,6 @@ export default function (pi: ExtensionAPI) {
 	register("update-ticket", "Update selected ticket from current session without writing Daily", updateActiveTaskDescription);
 	register("ac", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 	register("add-comments", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
-	register("touched", "Show commits touched this session and update Daily", showTouched);
-
 	pi.registerCommand("cockpit", {
 		description: "Open Scryer session cockpit",
 		handler: async (_args, ctx) => {

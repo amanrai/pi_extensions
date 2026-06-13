@@ -99,7 +99,12 @@ async function showMarkdown(ctx: ExtensionContext, file: string) {
 	const lines = splitLines(doc.text);
 	await ctx.ui.custom<void>((tui, theme, _kb, done) => {
 		let top = 0;
-		function pageSize() { return Math.max(8, Math.min(28, Math.floor((tui as any).height ?? 22) - 6)); }
+		function pageSize() {
+			const terminalHeight = Math.floor((tui as any).height ?? 22);
+			const targetHeight = Math.floor(terminalHeight * 0.8);
+			const chromeRows = 4 + (doc.truncated ? 1 : 0);
+			return Math.max(8, targetHeight - chromeRows);
+		}
 		function clamp() { top = Math.max(0, Math.min(top, Math.max(0, lines.length - pageSize()))); }
 		return {
 			render: (width: number) => {
