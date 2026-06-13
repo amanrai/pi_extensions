@@ -36,6 +36,8 @@ type RecorderState = {
 	activeProjectName?: string;
 	activeTaskId?: string;
 	activeTaskTitle?: string;
+	noProjectForSession?: boolean;
+	noTicketForSession?: boolean;
 };
 
 type ToolEvent = {
@@ -188,35 +190,140 @@ async function findWorkTaskType(projectId: string): Promise<string> {
 	return (types.find((t: any) => t.key === "work") ?? types[0]).id;
 }
 
+function execGit(args: string[], cwd: string): Promise<string | undefined> {
+	return new Promise((resolve) => {
+		execFile("git", args, { cwd, timeout: 5_000 }, (error, stdout) => resolve(error ? undefined : stdout.trim()));
+	});
+}
+
+function normalizeRepoUrl(value?: string | null): string {
+	return String(value ?? "")
+		.trim()
+		.replace(/^git@([^:]+):/, "https://$1/")
+		.replace(/\.git$/, "")
+		.replace(/\/$/, "")
+		.toLowerCase();
+}
+
+async function repoContext(ctx: ExtensionContext) {
+	const cwd = state?.cwd || ctx.cwd || process.cwd();
+	const gitRoot = await execGit(["rev-parse", "--show-toplevel"], cwd);
+	const root = gitRoot || cwd;
+	const remote = gitRoot ? await execGit(["remote", "get-url", "origin"], root) : undefined;
+	return { cwd, root, remote, rootName: basename(root) };
+}
+
+function projectScore(project: any, repo: Awaited<ReturnType<typeof repoContext>>): number {
+	let score = 0;
+	const remote = normalizeRepoUrl(repo.remote);
+	const projectRemote = normalizeRepoUrl(project.remote_repo_url);
+	if (remote && projectRemote && remote === projectRemote) score += 100;
+	const rel = String(project.relative_repo_path ?? "").replace(/^\/+|\/+$/g, "");
+	if (rel && (repo.root.endsWith(`/${rel}`) || repo.cwd.endsWith(`/${rel}`))) score += 60;
+	const name = String(project.name ?? "").toLowerCase();
+	const slug = String(project.slug ?? "").toLowerCase();
+	const rootName = repo.rootName.toLowerCase();
+	if (rootName && (name === rootName || slug === rootName)) score += 25;
+	if (rootName && (name.includes(rootName) || slug.includes(rootName) || rootName.includes(slug))) score += 10;
+	return score;
+}
+
+function projectLabel(project: any, score?: number): string {
+	const repo = project.remote_repo_url || project.relative_repo_path;
+	const suffix = score ? ` · match ${score}` : "";
+	return `${project.name} (${project.slug})${repo ? ` · ${repo}` : ""}${suffix}`;
+}
+
 async function pickActiveProject(ctx: ExtensionContext): Promise<boolean> {
 	if (!state || !ctx.hasUI) return false;
 	const projects = await api("/api/projects");
 	const visible = projects.filter((p: any) => p.slug !== DAILIES_SLUG && !String(p.name).startsWith("~"));
-	const labels = ["No active project / greenfield", ...visible.map((p: any) => `${p.name} (${p.slug})`)];
-	const projectChoice = await ctx.ui.select("Which project does this Pi session apply to?", labels);
-	if (!projectChoice || projectChoice === labels[0]) return false;
-	const project = visible[labels.indexOf(projectChoice) - 1];
+	const repo = await repoContext(ctx);
+	const scored = visible
+		.map((project: any) => ({ project, score: projectScore(project, repo) }))
+		.sort((a: any, b: any) => b.score - a.score || String(a.project.name).localeCompare(String(b.project.name)));
+	const obvious = scored.filter((x: any) => x.score > 0).slice(0, 8);
+	const other = scored.filter((x: any) => !obvious.some((o: any) => o.project.id === x.project.id));
+	const obviousLabels = obvious.map((x: any) => projectLabel(x.project, x.score));
+	const choices = [
+		...obviousLabels,
+		"Other project…",
+		"Continue without a project for this session",
+	];
+	const title = repo.remote
+		? `Project for ${displayPath(repo.root)} (${repo.remote})`
+		: `Project for ${displayPath(repo.root)}`;
+	let choice = await ctx.ui.select(title, choices);
+	if (!choice) return false;
+	let project: any | undefined;
+	if (choice === "Continue without a project for this session") {
+		state.activeProjectId = undefined;
+		state.activeProjectName = undefined;
+		state.activeTaskId = undefined;
+		state.activeTaskTitle = undefined;
+		state.noProjectForSession = true;
+		state.noTicketForSession = true;
+		await saveState();
+		ctx.ui.notify("Scryer recorder: continuing without a project for this session", "info");
+		return false;
+	}
+	if (choice === "Other project…") {
+		const otherLabels = other.map((x: any) => projectLabel(x.project));
+		choice = await ctx.ui.select("Other Scryer project", ["Cancel", ...otherLabels]);
+		if (!choice || choice === "Cancel") return false;
+		project = other[otherLabels.indexOf(choice)]?.project;
+	} else {
+		project = obvious[obviousLabels.indexOf(choice)]?.project;
+	}
 	if (!project) return false;
 	state.activeProjectId = project.id;
 	state.activeProjectName = project.name;
 	state.activeTaskId = undefined;
 	state.activeTaskTitle = undefined;
+	state.noProjectForSession = false;
+	state.noTicketForSession = false;
 	await saveState();
 	ctx.ui.notify(`Scryer recorder project: ${project.name}`, "info");
 	return true;
 }
 
+function taskRank(task: any): number {
+	const status = String(task.status ?? "");
+	if (status === "in_execution") return 0;
+	if (status === "unopened") return 1;
+	if (status === "ready_for_human_review") return 2;
+	if (status === "human_reviewed_and_closed") return 9;
+	return 4;
+}
+
 async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 	if (!state || !ctx.hasUI) return false;
 	if (!state.activeProjectId) {
-		ctx.ui.notify("Pick a project first with /pp or /pick-project", "warning");
+		ctx.ui.notify("Pick a project first with /pp or /project-picker", "warning");
 		return false;
 	}
-	const tasks = await api(`/api/tasks?project_id=${encodeURIComponent(state.activeProjectId)}`);
-	const taskLabels = ["Create a new ticket", ...tasks.map((t: any) => `${t.title} [${t.status}]`)];
-	const taskChoice = await ctx.ui.select(`Which ticket in ${state.activeProjectName ?? "project"}?`, taskLabels);
+	const tasks = (await api(`/api/tasks?project_id=${encodeURIComponent(state.activeProjectId)}`))
+		.sort((a: any, b: any) => taskRank(a) - taskRank(b) || String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
+	const openTasks = tasks.filter((t: any) => t.status !== "human_reviewed_and_closed");
+	const closedTasks = tasks.filter((t: any) => t.status === "human_reviewed_and_closed");
+	const shown = openTasks.slice(0, 30);
+	const taskLabels = shown.map((t: any) => `${t.title} [${t.status}]`);
+	const taskChoice = await ctx.ui.select(`Ticket in ${state.activeProjectName ?? "project"}?`, [
+		"Create a new ticket",
+		"Continue without a ticket for this session",
+		...taskLabels,
+		...(closedTasks.length ? ["Closed tickets…"] : []),
+	]);
 	if (!taskChoice) return false;
-	if (taskChoice === taskLabels[0]) {
+	if (taskChoice === "Continue without a ticket for this session") {
+		state.activeTaskId = undefined;
+		state.activeTaskTitle = undefined;
+		state.noTicketForSession = true;
+		await saveState();
+		ctx.ui.notify(`Scryer recorder: ${state.activeProjectName}, no active ticket`, "info");
+		return false;
+	}
+	if (taskChoice === "Create a new ticket") {
 		const title = await ctx.ui.input("New ticket title", `Pi work — ${state.sessionName}`);
 		if (!title) return false;
 		const taskTypeId = await findWorkTaskType(state.activeProjectId);
@@ -235,19 +342,28 @@ async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 		});
 		state.activeTaskId = task.id;
 		state.activeTaskTitle = task.title;
+	} else if (taskChoice === "Closed tickets…") {
+		const closedLabels = closedTasks.slice(0, 50).map((t: any) => `${t.title} [${t.status}]`);
+		const closedChoice = await ctx.ui.select("Closed ticket", ["Cancel", ...closedLabels]);
+		if (!closedChoice || closedChoice === "Cancel") return false;
+		const task = closedTasks[closedLabels.indexOf(closedChoice)];
+		if (!task) return false;
+		state.activeTaskId = task.id;
+		state.activeTaskTitle = task.title;
 	} else {
-		const task = tasks[taskLabels.indexOf(taskChoice) - 1];
+		const task = shown[taskLabels.indexOf(taskChoice)];
 		if (!task) return false;
 		state.activeTaskId = task.id;
 		state.activeTaskTitle = task.title;
 	}
+	state.noTicketForSession = false;
 	await saveState();
 	ctx.ui.notify(`Scryer recorder ticket: ${state.activeTaskTitle}`, "info");
 	return true;
 }
 
 async function chooseActiveProjectAndTask(ctx: ExtensionContext) {
-	if (!state || state.activeProjectId || !ctx.hasUI) return;
+	if (!state || state.activeProjectId || state.noProjectForSession || !ctx.hasUI) return;
 	if (await pickActiveProject(ctx)) await pickActiveTicket(ctx);
 }
 
@@ -633,10 +749,13 @@ export default function (pi: ExtensionAPI) {
 		});
 	};
 
-	register("pp", "Pick active PM project for Scryer recorder", async (ctx) => { await pickActiveProject(ctx); });
-	register("pick-project", "Pick active PM project for Scryer recorder", async (ctx) => { await pickActiveProject(ctx); });
-	register("pt", "Pick active PM ticket for Scryer recorder", async (ctx) => { await pickActiveTicket(ctx); });
-	register("pick-ticket", "Pick active PM ticket for Scryer recorder", async (ctx) => { await pickActiveTicket(ctx); });
+	register("pp", "Repo-aware Scryer project picker", async (ctx) => { await pickActiveProject(ctx); });
+	register("project-picker", "Repo-aware Scryer project picker", async (ctx) => { await pickActiveProject(ctx); });
+	register("pick-project", "Repo-aware Scryer project picker", async (ctx) => { await pickActiveProject(ctx); });
+	register("tp", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
+	register("ticket-picker", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
+	register("pt", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
+	register("pick-ticket", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
 	register("ut", "Update selected ticket description from recorder summary", updateActiveTaskDescription);
 	register("update-ticket", "Update selected ticket description from recorder summary", updateActiveTaskDescription);
 	register("ac", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
