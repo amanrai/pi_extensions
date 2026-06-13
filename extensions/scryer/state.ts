@@ -74,6 +74,7 @@ export async function loadState(pi: ExtensionAPI, ctx: ExtensionContext): Promis
 		sessionName: name,
 		cwd,
 		cwdTag: `cwd:${displayPath(cwd)}`,
+		sessionStartedAt: Date.now(),
 		outputTokensSinceSummary: 0,
 		summary: "",
 	};

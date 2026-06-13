@@ -14,6 +14,7 @@ export type RecorderState = {
 	lastSaveReason?: string;
 	lastSaveAttemptAt?: number;
 	lastActivityAt?: number;
+	sessionStartedAt?: number;
 	lastPmPromptAt?: number;
 	outputTokensSinceSummary: number;
 	summary: string;

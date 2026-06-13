@@ -10,7 +10,12 @@ import { displayPath, loadState, saveState, today } from "./state.ts";
 import { projectLabel, projectScore, repoContext } from "./repo.ts";
 import { contentText, summaryPrompt, updateTicketPrompt } from "./prompts.ts";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 let state: RecorderState | undefined;
 let idleTimer: NodeJS.Timeout | undefined;
@@ -23,6 +28,7 @@ let queuedInputs: Array<{ text: string; images?: any[] }> = [];
 let deetsTimer: NodeJS.Timeout | undefined;
 let foregroundStepUpdate: ((line: string) => void) | undefined;
 let pendingSave: { reason: string; ctx: ExtensionContext; endSession: boolean } | undefined;
+let touchedRepoRoots = new Set<string>();
 
 type PickerItem = SelectItem & { value: string };
 
@@ -504,6 +510,88 @@ function deetsMarkdown(): string {
 	return deetsLines().join("\n");
 }
 
+function expandPath(rawPath: string, cwd: string): string {
+	const trimmed = rawPath.trim();
+	if (trimmed.startsWith("~/")) return resolve(homedir(), trimmed.slice(2));
+	return isAbsolute(trimmed) ? trimmed : resolve(cwd, trimmed);
+}
+
+async function gitRootForPath(path: string): Promise<string | undefined> {
+	for (const candidate of [path, dirname(path)]) {
+		try {
+			const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: candidate, timeout: 3000 });
+			const root = stdout.trim();
+			if (root) return root;
+		} catch {}
+	}
+	return undefined;
+}
+
+async function rememberTouchedPath(ctx: ExtensionContext, rawPath: unknown) {
+	if (typeof rawPath !== "string" || !rawPath.trim()) return;
+	const root = await gitRootForPath(expandPath(rawPath, ctx.cwd));
+	if (root) touchedRepoRoots.add(root);
+}
+
+async function collectTouchedCommits(ctx: ExtensionContext) {
+	const roots = new Set(touchedRepoRoots);
+	const cwdRoot = await gitRootForPath(ctx.cwd);
+	if (cwdRoot) roots.add(cwdRoot);
+	const since = Math.floor((state?.sessionStartedAt ?? Date.now()) / 1000);
+	const rows: Array<{ repo: string; root: string; hash: string; subject: string; timestamp: number }> = [];
+	for (const root of roots) {
+		try {
+			const { stdout } = await execFileAsync("git", ["log", `--since=${since}`, "--format=%H%x00%ct%x00%s"], { cwd: root, timeout: 5000 });
+			for (const line of stdout.split("\n").filter(Boolean)) {
+				const [hash, ts, subject] = line.split("\x00");
+				if (hash && ts && subject) rows.push({ repo: root.split("/").pop() ?? root, root, hash, subject, timestamp: Number(ts) * 1000 });
+			}
+		} catch {}
+	}
+	return rows.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function touchedMarkdown(rows: Awaited<ReturnType<typeof collectTouchedCommits>>): string {
+	if (!rows.length) return "## Commits touched this session\n\nNo commits found since this Pi session started.";
+	return [
+		"## Commits touched this session",
+		"",
+		...rows.map((r) => `- \`${r.repo}\` \`${r.hash.slice(0, 7)}\` ${r.subject} — ${ago(r.timestamp)}`),
+	].join("\n");
+}
+
+function replaceMarkdownSection(md: string, heading: string, section: string): string {
+	const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const re = new RegExp(`(^|\\n)${escaped}[\\s\\S]*?(?=\\n##\\s|$)`);
+	if (re.test(md)) return md.replace(re, `\n${section}`).trimStart();
+	return `${md.trimEnd()}\n\n${section}\n`;
+}
+
+async function updateDailyTouchedSection(ctx: ExtensionContext, markdown: string) {
+	if (!state) return;
+	if (!(await ensurePmReachable(ctx, state, saveState))) return;
+	const ticketId = await ensureTicket(false);
+	const ticket = await getTicket(ticketId);
+	const next = replaceMarkdownSection(String(ticket?.description_md ?? ""), "## Commits touched this session", markdown);
+	await api(`/api/tasks/${ticketId}`, {
+		method: "PATCH",
+		body: JSON.stringify({ description_md: next, tag_names: ["dailies", state.cwdTag] }),
+	});
+	state.ticketTitle = ticket?.title ?? state.ticketTitle;
+	await saveState(state);
+}
+
+async function showTouched(ctx: ExtensionContext) {
+	state ??= activePi ? await loadState(activePi, ctx) : state;
+	const rows = await collectTouchedCommits(ctx);
+	const markdown = touchedMarkdown(rows);
+	if (ctx.hasUI) {
+		ctx.ui.setWidget("scryer-touched", markdown.split("\n"), { placement: "belowEditor" });
+		ctx.ui.notify(`Touched commits: ${rows.length}`, "info");
+	}
+	await updateDailyTouchedSection(ctx, markdown);
+}
+
 function saveDestinationLines(line: string): string[] {
 	return [
 		`▸ Scryer recorder: ${line}`,
@@ -716,6 +804,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		activeCtx = ctx;
 		state = await loadState(pi, ctx);
+		state.sessionStartedAt ??= Date.now();
 		state.lastActivityAt = Date.now();
 		if (ctx.hasUI) {
 			ctx.ui.setWidget("scryer-recorder", undefined);
@@ -749,9 +838,10 @@ export default function (pi: ExtensionAPI) {
 		await saveState(state);
 	});
 
-	pi.on("tool_call", async (event) => {
+	pi.on("tool_call", async (event, ctx) => {
 		recentTools.push({ name: event.toolName, input: event.input });
 		if (recentTools.length > 100) recentTools = recentTools.slice(-100);
+		if (["read", "write", "edit"].includes(event.toolName)) await rememberTouchedPath(ctx, (event.input as any)?.path);
 	});
 
 	pi.on("tool_result", async (event: any) => {
@@ -817,6 +907,7 @@ export default function (pi: ExtensionAPI) {
 	register("update-ticket", "Update selected ticket from current session without writing Daily", updateActiveTaskDescription);
 	register("ac", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 	register("add-comments", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
+	register("touched", "Show commits touched this session and update Daily", showTouched);
 
 	pi.registerCommand("deets", {
 		description: "Show current Scryer project/ticket/save context",
