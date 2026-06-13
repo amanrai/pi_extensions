@@ -1,6 +1,7 @@
 import { complete } from "@mariozechner/pi-ai";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { BorderedLoader } from "@earendil-works/pi-coding-agent";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -651,10 +652,12 @@ function activeTargetLabel(): string {
 
 async function updateActiveTaskDescription(ctx: ExtensionContext) {
 	if (!state || !(await ensureActiveTicketSelected(ctx))) return;
-	await withScryerBusy(ctx, `updating ${activeTargetLabel()}…`, async () => {
-		const ok = await reviseActiveTaskFromCurrentState(ctx);
-		if (!ok) throw new Error("active ticket no longer exists");
-		if (ctx.hasUI) ctx.ui.notify(`Updated Work → ${activeTargetLabel()}`, "info");
+	await foregroundScryer(ctx, `Updating Scryer ticket: ${activeTargetLabel()}`, async () => {
+		await withScryerBusy(ctx, `updating ${activeTargetLabel()}…`, async () => {
+			const ok = await reviseActiveTaskFromCurrentState(ctx);
+			if (!ok) throw new Error("active ticket no longer exists");
+			if (ctx.hasUI) ctx.ui.notify(`Updated Work → ${activeTargetLabel()}`, "info");
+		});
 	});
 }
 
@@ -765,6 +768,20 @@ async function withScryerBusy(ctx: ExtensionContext, label: string, fn: () => Pr
 		setRecorderProgress(ctx, undefined);
 		await flushQueuedInputs();
 	}
+}
+
+async function foregroundScryer(ctx: ExtensionContext, label: string, fn: () => Promise<void>) {
+	if (!ctx.hasUI || ctx.mode !== "tui") {
+		await fn();
+		return;
+	}
+	const result = await ctx.ui.custom<Error | null>((tui, theme, _kb, done) => {
+		const loader = new BorderedLoader(tui, theme, label);
+		loader.onAbort = () => ctx.ui.notify("Scryer operation is still running; wait for it to finish.", "warning");
+		fn().then(() => done(null)).catch((err) => done(err instanceof Error ? err : new Error(String(err))));
+		return loader;
+	});
+	if (result) throw result;
 }
 
 async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSession = false) {
@@ -989,7 +1006,11 @@ export default function (pi: ExtensionAPI) {
 		description: "Save a Scryer recorder summary to the Dailies PM ticket",
 		handler: async (_args, ctx) => {
 			try {
-				await summarizeAndPersist("manual-save", ctx, false);
+				activeCtx = ctx;
+				state ??= await loadState(pi, ctx);
+				await foregroundScryer(ctx, "Saving Scryer Daily / active ticket", async () => {
+					await summarizeAndPersist("manual-save", ctx, false);
+				});
 			} catch (err: any) {
 				if (ctx.hasUI) ctx.ui.notify(`Scryer recorder save failed: ${err?.message ?? err}`, "error");
 			}

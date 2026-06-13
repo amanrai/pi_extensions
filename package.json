@@ -17,6 +17,7 @@
     "@mariozechner/pi-ai": "*",
     "@mariozechner/pi-coding-agent": "*",
     "@mariozechner/pi-tui": "*",
+    "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"
   }
 }
