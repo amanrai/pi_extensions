@@ -16,6 +16,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appendTouchlogEntry, readTouchlog, type TouchLogEntry } from "./touchlog.ts";
 import { overlayStyle } from "./overlay-style.ts";
+import { describeModalConfig, modalBodyRows, modalHeightOption, modalWidthOption, parseModalConfigArgs, readModalConfig, writeModalConfig } from "./modal-config.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -657,9 +658,14 @@ function groupedTouchedLines(rows: TouchLogEntry[]): string[] {
 
 async function showScrollableModal(ctx: ExtensionContext, title: string, lines: string[], subtitle = "") {
 	if (!ctx.hasUI) return;
+	const modalConfig = await readModalConfig();
 	await ctx.ui.custom<void>((tui, theme, _kb, done) => {
 		let top = 0;
-		function pageSize() { return Math.max(8, Math.min(26, Math.floor((tui as any).height ?? 22) - 6)); }
+		function pageSize() {
+			const terminalHeight = Math.floor((tui as any).height ?? 22);
+			const chromeRows = 4 + (subtitle ? 1 : 0);
+			return Math.max(8, modalBodyRows(modalConfig, terminalHeight, chromeRows));
+		}
 		function clamp() { top = Math.max(0, Math.min(top, Math.max(0, lines.length - pageSize()))); }
 		return {
 			render: (width: number) => {
@@ -690,7 +696,7 @@ async function showScrollableModal(ctx: ExtensionContext, title: string, lines: 
 				tui.requestRender();
 			},
 		};
-	}, { overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } });
+	}, { overlay: true, overlayOptions: { anchor: "center", width: modalWidthOption(modalConfig), maxHeight: modalHeightOption(modalConfig) } });
 }
 
 async function showCockpit(ctx: ExtensionContext) {
@@ -1072,6 +1078,24 @@ export default function (pi: ExtensionAPI) {
 	register("update-ticket", "Update selected ticket from current session without writing Daily", updateActiveTaskDescription);
 	register("ac", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 	register("add-comments", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
+
+	pi.registerCommand("modal-config", {
+		description: "Configure modal width/height. Usage: /modal-config [width <cols>] [height <rows>] | /modal-config <cols> <rows> | /modal-config reset",
+		handler: async (args, ctx) => {
+			try {
+				const existing = await readModalConfig();
+				const parsed = parseModalConfigArgs(args, existing);
+				if (parsed.config && !parsed.showOnly) await writeModalConfig(parsed.config);
+				const message = parsed.showOnly && parsed.config
+					? `modal config: ${describeModalConfig(parsed.config)}`
+					: parsed.message;
+				if (ctx.hasUI) ctx.ui.notify(message, parsed.config ? "info" : "error");
+			} catch (err: any) {
+				if (ctx.hasUI) ctx.ui.notify(`modal-config failed: ${err?.message ?? err}`, "error");
+			}
+		},
+	});
+
 	pi.registerCommand("cockpit", {
 		description: "Open Scryer session cockpit",
 		handler: async (_args, ctx) => {

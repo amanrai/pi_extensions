@@ -3,6 +3,7 @@ import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import { Container, Key, matchesKey, SelectList, Text, truncateToWidth, type SelectItem } from "@earendil-works/pi-tui";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { overlayStyle } from "./scryer/overlay-style.ts";
+import { modalBodyRows, modalHeightOption, modalWidthOption, readModalConfig } from "./scryer/modal-config.ts";
 import { homedir } from "node:os";
 import { basename, relative, resolve } from "node:path";
 
@@ -97,13 +98,13 @@ function renderMarkdownLine(line: string): string {
 async function showMarkdown(ctx: ExtensionContext, file: string) {
 	const doc = await readMarkdown(file);
 	const lines = splitLines(doc.text);
+	const modalConfig = await readModalConfig();
 	await ctx.ui.custom<void>((tui, theme, _kb, done) => {
 		let top = 0;
 		function pageSize() {
 			const terminalHeight = Math.floor((tui as any).height ?? 22);
-			const targetHeight = Math.floor(terminalHeight * 0.8);
 			const chromeRows = 4 + (doc.truncated ? 1 : 0);
-			return Math.max(8, targetHeight - chromeRows);
+			return Math.max(8, modalBodyRows(modalConfig, terminalHeight, chromeRows));
 		}
 		function clamp() { top = Math.max(0, Math.min(top, Math.max(0, lines.length - pageSize()))); }
 		return {
@@ -137,7 +138,7 @@ async function showMarkdown(ctx: ExtensionContext, file: string) {
 				tui.requestRender();
 			},
 		};
-	}, { overlay: true, overlayOptions: { anchor: "center", width: "90%", maxHeight: "80%" } });
+	}, { overlay: true, overlayOptions: { anchor: "center", width: modalWidthOption(modalConfig), maxHeight: modalHeightOption(modalConfig) } });
 }
 
 async function openReadMd(ctx: ExtensionContext, args = "") {
