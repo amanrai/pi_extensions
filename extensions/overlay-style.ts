@@ -1,9 +1,9 @@
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 const RESET = "\x1b[0m";
-const BG = "\x1b[48;5;236m";
-const FG = "\x1b[38;5;250m";
-const MUTED = "\x1b[38;5;245m";
+const BG = "\x1b[48;2;45;55;72m";
+const FG = "\x1b[38;5;255m";
+const MUTED = "\x1b[38;5;250m";
 const CYAN = "\x1b[38;5;81m";
 const AMBER = "\x1b[38;5;220m";
 const BOLD = "\x1b[1m";
