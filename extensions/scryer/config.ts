@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-export const PM_URL = process.env.SCRYER_PM_URL ?? "http://127.0.0.1:43210";
+export const PM_URL = process.env.SCRYER_PM_URL ?? "http://100.105.192.98:43210";
 export const DAILIES_SLUG = process.env.SCRYER_DAILIES_SLUG ?? "dailies";
 export const OUTPUT_TOKEN_THRESHOLD = Number(process.env.SCRYER_RECORDER_OUTPUT_TOKEN_THRESHOLD ?? 50_000);
 export const IDLE_MS = Number(process.env.SCRYER_RECORDER_IDLE_MS ?? 10 * 60 * 1000);

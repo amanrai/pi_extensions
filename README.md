@@ -32,4 +32,6 @@ Reload in pi:
 
 ## Notes
 
+The Scryer PM extension defaults to `http://100.105.192.98:43210`. Override with `SCRYER_PM_URL` when needed.
+
 `starship-footer.ts` expects `starship` in PATH. It uses `gh` when available to show the current branch PR number, and shows the current session's latest touched commit.
