@@ -1,6 +1,6 @@
 ---
 name: scryer
-description: Use when working in Pi with Scryer PM: selecting projects/tickets, understanding the Scryer API endpoint, saving session summaries, updating tickets, adding comments, or checking Scryer recorder context.
+description: "Use when working in Pi with Scryer PM: selecting projects/tickets, understanding the Scryer API endpoint, saving session summaries, updating tickets, adding comments, or checking Scryer recorder context."
 ---
 
 # Scryer PM in Pi
