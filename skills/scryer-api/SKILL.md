@@ -9,17 +9,19 @@ Use this skill when direct backend access is required. For normal project/ticket
 
 ## Base URL
 
-Default API base URL:
+Default API base URL — use the tailnet address, not localhost:
 
 ```text
 http://100.105.192.98:43210
 ```
 
-Override for Pi extension behavior with:
+If setting Pi extension behavior explicitly, use the tailnet address:
 
 ```bash
-SCRYER_PM_URL=<url>
+SCRYER_PM_URL=http://100.105.192.98:43210
 ```
+
+Do not use `localhost` or `127.0.0.1` for Scryer PM unless the user explicitly asks to target a local-only instance.
 
 ## Health check
 
@@ -27,7 +29,7 @@ SCRYER_PM_URL=<url>
 curl -s http://100.105.192.98:43210/healthz
 ```
 
-If unreachable, report that the default Scryer endpoint is unavailable. The extension may offer to start Scryer with:
+If unreachable, report that the default Scryer tailnet endpoint is unavailable. The extension may offer to start Scryer with:
 
 ```bash
 scryer up --no-open

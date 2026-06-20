@@ -9,19 +9,19 @@ Scryer is Aman's project-management system. Pi has a Scryer extension installed 
 
 ## API
 
-Default Scryer PM API base URL:
+Default Scryer PM API base URL — use the tailnet address, not localhost:
 
 ```text
 http://100.105.192.98:43210
 ```
 
-This can be overridden with:
+If setting the environment explicitly, set it to the tailnet address:
 
 ```bash
-SCRYER_PM_URL=<url>
+SCRYER_PM_URL=http://100.105.192.98:43210
 ```
 
-Do not ask the user for the API URL unless the default is unreachable or they explicitly want to use another Scryer instance.
+Do not use `localhost` or `127.0.0.1` for Scryer PM unless the user explicitly asks to target a local-only instance. Do not ask the user for the API URL unless the default tailnet endpoint is unreachable or they explicitly want to use another Scryer instance.
 
 ## Default workflow
 
@@ -87,7 +87,7 @@ Recorder/context:
 
 - Prefer using the installed Scryer Pi commands over direct API calls for normal project/ticket/session workflow.
 - Use direct API calls only when specifically debugging Scryer itself or when the extension command surface is insufficient.
-- If Scryer is unreachable, tell the user the default endpoint failed and ask whether to continue without Scryer context or use another `SCRYER_PM_URL`.
+- If Scryer is unreachable, tell the user the default tailnet endpoint failed and ask whether to continue without Scryer context or use another `SCRYER_PM_URL`.
 - If the active project/ticket seems wrong, ask before changing it.
 - Avoid noisy Scryer updates; update/save at meaningful checkpoints or when the user asks.
 

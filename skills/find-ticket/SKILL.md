@@ -41,7 +41,7 @@ The ticket picker supports typing to filter in the UI. Use that before doing dir
 
 ## Direct search fallback
 
-If the picker is insufficient or the user asks for search, use the Scryer API.
+If the picker is insufficient or the user asks for search, use the Scryer API at the tailnet address `http://100.105.192.98:43210`. Do not use `localhost` or `127.0.0.1` for Scryer PM unless the user explicitly asks.
 
 List projects:
 

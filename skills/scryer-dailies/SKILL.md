@@ -105,4 +105,4 @@ Check context:
 /deets
 ```
 
-If Scryer is unreachable, report the default endpoint and ask whether to continue without saving or configure another `SCRYER_PM_URL`.
+If Scryer is unreachable, report the default tailnet endpoint (`http://100.105.192.98:43210`) and ask whether to continue without saving or configure another `SCRYER_PM_URL`. Do not substitute `localhost` for Scryer PM unless the user explicitly asks.
