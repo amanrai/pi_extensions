@@ -972,7 +972,10 @@ export default function (pi: ExtensionAPI) {
 			ctx.ui.setWidget("scryer-recorder-deets", undefined);
 		}
 		await saveState(state);
-		await ensureScryerContext(ctx, "startup");
+		// Disabled for smux/iPad usability: do not block startup on keyboard-driven
+		// project/ticket pickers. The picker functionality remains available via
+		// /pp, /pt, and the existing input-time context gate.
+		// await ensureScryerContext(ctx, "startup");
 	});
 
 	pi.on("input", async (event, ctx) => {
