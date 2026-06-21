@@ -287,8 +287,7 @@ async function pollResponses(pi: ExtensionAPI, ctx: ExtensionContext) {
     if (response.response.kind === "dismiss") continue;
     const text = response.response.text?.trim();
     if (!text) continue;
-    if (ctx.isIdle()) pi.sendUserMessage(text);
-    else pi.sendUserMessage(text, { deliverAs: "followUp" });
+    pi.sendUserMessage(text, { deliverAs: "followUp" });
   }
 }
 
@@ -302,6 +301,9 @@ function stopTimers() {
 async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   currentCtx = ctx;
   producerFrom = await ensureProducerFrom(ctx);
+  // Do not replay old responses after reload/resume. Comms responses are edge-triggered.
+  lastResponseSince = new Date().toISOString();
+  processedResponses.clear();
   emitMarker(pi, ctx);
   stopTimers();
   consumerTimer = setInterval(() => { if (currentCtx) pollActiveRequests(currentCtx).catch(() => {}); }, 1200);
