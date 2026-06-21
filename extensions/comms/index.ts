@@ -42,7 +42,7 @@ const MARKER_RE = /^@@SCRYER_INTERACTION_PRODUCER_V1@@(\{[^\r\n]*\})@@END_SCRYER
 
 let currentCtx: ExtensionContext | undefined;
 let producerFrom: string | undefined;
-let consumerEnabled = true;
+let consumerEnabled = false;
 let consumerTimer: NodeJS.Timeout | undefined;
 let responseTimer: NodeJS.Timeout | undefined;
 let activeModalRequestId: string | undefined;
@@ -295,9 +295,8 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("comms-init", {
     description: "Reinitialize Scryer interaction comms producer and local TUI consumer",
     handler: async (_args, ctx) => {
-      consumerEnabled = true;
       await startComms(pi, ctx);
-      ctx.ui.notify("comms initialized", "info");
+      ctx.ui.notify(`comms initialized; TUI consumer ${consumerEnabled ? "enabled" : "disabled"}`, "info");
     },
   });
   pi.registerCommand("comms-disable", {
@@ -307,6 +306,14 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("comms-enable", {
     description: "Enable local Pi TUI interaction modals for this session",
     handler: async (_args, ctx) => { consumerEnabled = true; ctx.ui.notify("comms TUI consumer enabled", "info"); },
+  });
+  pi.registerCommand("comms-enable-tui", {
+    description: "Enable local Pi TUI interaction modals for this session",
+    handler: async (_args, ctx) => { consumerEnabled = true; ctx.ui.notify("comms TUI consumer enabled", "info"); },
+  });
+  pi.registerCommand("comms-disable-tui", {
+    description: "Disable local Pi TUI interaction modals for this session only",
+    handler: async (_args, ctx) => { consumerEnabled = false; ctx.ui.notify("comms TUI consumer disabled for this session", "info"); },
   });
   pi.registerCommand("comms-status", {
     description: "Show Scryer interaction comms status",
