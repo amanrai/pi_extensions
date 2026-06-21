@@ -173,6 +173,44 @@ function taskRank(task: any): number {
 	return 4;
 }
 
+async function setActiveProjectById(ctx: ExtensionContext, projectId: string): Promise<boolean> {
+	if (!state) return false;
+	const project = await api(`/api/projects/${encodeURIComponent(projectId)}`);
+	if (!project?.id) throw new Error(`Project not found: ${projectId}`);
+	state.activeProjectId = project.id;
+	state.activeProjectName = project.name;
+	state.activeTaskId = undefined;
+	state.activeTaskTitle = undefined;
+	state.noProjectForSession = false;
+	state.noTicketForSession = false;
+	await saveState(state);
+	if (ctx.hasUI) ctx.ui.notify(`Scryer recorder project: ${project.name}`, "info");
+	return true;
+}
+
+async function setActiveTicketById(ctx: ExtensionContext, ticketId: string): Promise<boolean> {
+	if (!state) return false;
+	const task = await getTicket(ticketId);
+	if (!task?.id) throw new Error(`Ticket not found: ${ticketId}`);
+	state.activeTaskId = task.id;
+	state.activeTaskTitle = task.title;
+	const projectId = task.project_id ?? task.projectId ?? task.project?.id;
+	if (projectId) {
+		state.activeProjectId = projectId;
+		try {
+			const project = await api(`/api/projects/${encodeURIComponent(projectId)}`);
+			state.activeProjectName = project?.name ?? task.project?.name ?? state.activeProjectName;
+		} catch {
+			state.activeProjectName = task.project?.name ?? state.activeProjectName;
+		}
+	}
+	state.noProjectForSession = false;
+	state.noTicketForSession = false;
+	await saveState(state);
+	if (ctx.hasUI) ctx.ui.notify(`Scryer recorder ticket: ${state.activeTaskTitle}`, "info");
+	return true;
+}
+
 async function pickActiveTicket(ctx: ExtensionContext): Promise<boolean> {
 	if (!state || !ctx.hasUI) return false;
 	if (!state.activeProjectId) {
@@ -1054,15 +1092,15 @@ export default function (pi: ExtensionAPI) {
 		await saveState(state);
 	});
 
-	const register = (name: string, description: string, handler: (ctx: ExtensionContext) => Promise<void>) => {
+	const register = (name: string, description: string, handler: (ctx: ExtensionContext, args: string) => Promise<void>) => {
 		pi.registerCommand(name, {
 			description,
-			handler: async (_args, ctx) => {
+			handler: async (args, ctx) => {
 				try {
 					activeCtx = ctx;
 					state ??= await loadState(pi, ctx);
 					if (!(await ensurePmReachable(ctx, state, saveState))) return;
-					await handler(ctx);
+					await handler(ctx, String(args ?? "").trim());
 				} catch (err: any) {
 					if (ctx.hasUI) ctx.ui.notify(`Scryer recorder ${name} failed: ${err?.message ?? err}`, "error");
 				} finally {
@@ -1072,10 +1110,10 @@ export default function (pi: ExtensionAPI) {
 		});
 	};
 
-	register("pp", "Repo-aware Scryer project picker", async (ctx) => { await pickActiveProject(ctx); });
+	register("pp", "Set Scryer project by ID, or open repo-aware project picker", async (ctx, args) => { args ? await setActiveProjectById(ctx, args) : await pickActiveProject(ctx); });
 	register("project-picker", "Repo-aware Scryer project picker", async (ctx) => { await pickActiveProject(ctx); });
 	register("pick-project", "Repo-aware Scryer project picker", async (ctx) => { await pickActiveProject(ctx); });
-	register("tp", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
+	register("tp", "Set Scryer ticket by ID, or open ticket picker for the selected project", async (ctx, args) => { args ? await setActiveTicketById(ctx, args) : await pickActiveTicket(ctx); });
 	register("ticket-picker", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
 	register("pt", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
 	register("pick-ticket", "Scryer ticket picker for the selected project", async (ctx) => { await pickActiveTicket(ctx); });
