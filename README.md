@@ -35,6 +35,6 @@ Reload in pi:
 
 The Scryer PM extension defaults to `http://100.105.192.98:43210`. Override with `SCRYER_PM_URL` when needed.
 
-The comms extension defaults to `http://127.0.0.1:43217`. Override with `SCRYER_INTERACTIONS_URL` when needed. Its automatic post-message inference waits 30s by default; override startup default with `SCRYER_COMMS_INFERENCE_DELAY_MS` or current-session delay with `/comms-delay <seconds>`.
+The comms extension defaults to `http://127.0.0.1:43217`. Override with `SCRYER_INTERACTIONS_URL` when needed. Its automatic interaction inference waits 30s by default; override startup default with `SCRYER_COMMS_INFERENCE_DELAY_MS` or current-session delay with `/comms-delay <seconds>`. Its semantic walkaway-update inference waits 8s by default; override startup default with `SCRYER_COMMS_UPDATE_DELAY_MS` or current-session delay with `/comms-update-delay <seconds>`.
 
 `starship-footer.ts` expects `starship` in PATH. It uses `gh` when available to show the current branch PR number, and shows the current session's latest touched commit.
