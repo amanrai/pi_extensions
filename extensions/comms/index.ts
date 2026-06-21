@@ -1,0 +1,324 @@
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { homedir } from "node:os";
+import { modalAnchorOption, modalHeightOption, modalOffsetYOption, modalWidthOption, readModalConfig } from "../scryer/modal-config.ts";
+import { overlayStyle } from "../scryer/overlay-style.ts";
+import { Type } from "typebox";
+
+type InteractionChoice = { id: string; label: string; send?: string; custom?: boolean };
+type InteractionRequest = {
+  id: string;
+  from: string;
+  kind: string;
+  payload: {
+    title?: string;
+    body?: string;
+    choices?: InteractionChoice[];
+    [key: string]: unknown;
+  };
+};
+type InteractionResponse = {
+  id: string;
+  requestId: string;
+  from: string;
+  responder: Record<string, unknown>;
+  response: { kind: string; choiceId?: string; text?: string; [key: string]: unknown };
+  receivedAt?: string;
+};
+
+type CommsState = {
+  bySession: Record<string, string>;
+};
+
+const SERVICE_URL = (process.env.SCRYER_INTERACTIONS_URL ?? "http://127.0.0.1:43217").replace(/\/$/, "");
+const STATE_DIR = join(homedir(), ".pi", "agent", "comms");
+const STATE_PATH = join(STATE_DIR, "state.json");
+const MARKER_PREFIX = "@@SCRYER_INTERACTION_PRODUCER_V1@@";
+const MARKER_SUFFIX = "@@END_SCRYER_INTERACTION_PRODUCER@@";
+const MARKER_RE = /^@@SCRYER_INTERACTION_PRODUCER_V1@@(\{[^\r\n]*\})@@END_SCRYER_INTERACTION_PRODUCER@@$/;
+
+let currentCtx: ExtensionContext | undefined;
+let producerFrom: string | undefined;
+let consumerEnabled = true;
+let consumerTimer: NodeJS.Timeout | undefined;
+let responseTimer: NodeJS.Timeout | undefined;
+let activeModalRequestId: string | undefined;
+let lastResponseSince = "";
+const discoveredFrom = new Set<string>();
+const processedResponses = new Set<string>();
+
+async function readState(): Promise<CommsState> {
+  try { return JSON.parse(await readFile(STATE_PATH, "utf8")) as CommsState; }
+  catch { return { bySession: {} }; }
+}
+
+async function writeState(state: CommsState) {
+  await mkdir(STATE_DIR, { recursive: true });
+  await writeFile(STATE_PATH, JSON.stringify(state, null, 2));
+}
+
+async function sessionKey(ctx: ExtensionContext) {
+  const file = ctx.sessionManager.getSessionFile?.();
+  if (file) {
+    try {
+      const first = (await readFile(file, "utf8")).split(/\r?\n/, 1)[0];
+      const header = JSON.parse(first || "{}");
+      if (typeof header.id === "string" && header.id) return `pi-session:${header.id}`;
+    } catch {}
+    return `pi-session-file:${createHash("sha1").update(file).digest("hex")}`;
+  }
+  return `pi-ephemeral:${createHash("sha1").update(`${ctx.cwd}:${process.pid}`).digest("hex")}`;
+}
+
+async function ensureProducerFrom(ctx: ExtensionContext) {
+  const key = await sessionKey(ctx);
+  const state = await readState();
+  state.bySession[key] ??= randomUUID();
+  await writeState(state);
+  return state.bySession[key];
+}
+
+function observeMarker(line: string) {
+  const match = MARKER_RE.exec(line.trim());
+  if (!match) return;
+  try {
+    const payload = JSON.parse(match[1]);
+    if (typeof payload.from === "string" && payload.from) discoveredFrom.add(payload.from);
+  } catch {}
+}
+
+function producerMarker(from: string, ctx: ExtensionContext) {
+  return `${MARKER_PREFIX}${JSON.stringify({
+    from,
+    emittedAt: new Date().toISOString(),
+    kind: "pi",
+    cwd: ctx.cwd,
+    sessionFile: ctx.sessionManager.getSessionFile?.() ? basename(ctx.sessionManager.getSessionFile()!) : undefined,
+  })}${MARKER_SUFFIX}`;
+}
+
+function emitMarker(pi: ExtensionAPI, ctx: ExtensionContext) {
+  if (!producerFrom) return;
+  const marker = producerMarker(producerFrom, ctx);
+  observeMarker(marker);
+  pi.sendMessage({ customType: "scryer-comms-producer", content: marker, display: true });
+}
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${SERVICE_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return await res.json() as T;
+}
+
+function padAnsi(s: string, width: number) {
+  const v = visibleWidth(s);
+  return v >= width ? truncateToWidth(s, width) : s + " ".repeat(width - v);
+}
+
+async function submitResponse(request: InteractionRequest, response: InteractionResponse["response"]) {
+  await api("/api/responses", {
+    method: "POST",
+    body: JSON.stringify({
+      id: randomUUID(),
+      requestId: request.id,
+      from: request.from,
+      responder: { kind: "pi-tui", pid: process.pid },
+      response,
+    }),
+  });
+}
+
+async function showInteractionModal(ctx: ExtensionContext, request: InteractionRequest) {
+  if (!ctx.hasUI || ctx.mode !== "tui") return;
+  activeModalRequestId = request.id;
+  const modalConfig = await readModalConfig();
+  const choices = request.payload.choices?.length ? request.payload.choices : [{ id: "custom", label: "Type response…", custom: true }];
+  await ctx.ui.custom<void>((tui, _theme, _kb, done) => {
+    let selected = 0;
+    let customMode = false;
+    let draft = "";
+    function finish() { done(undefined); }
+    return {
+      render: (width: number) => {
+        const panelWidth = Math.max(20, width - 2);
+        const lines: string[] = [];
+        lines.push(overlayStyle.border(panelWidth));
+        lines.push(overlayStyle.title(String(request.payload.title ?? "Input needed"), panelWidth));
+        const body = String(request.payload.body ?? "The agent is waiting for direction.");
+        for (const line of body.split(/\r?\n/).slice(0, 6)) lines.push(overlayStyle.line(truncateToWidth(line || " ", panelWidth - 4), panelWidth));
+        lines.push(overlayStyle.line("", panelWidth));
+        if (customMode) {
+          lines.push(overlayStyle.muted("Type response", panelWidth));
+          lines.push(overlayStyle.line(padAnsi(truncateToWidth(draft || " ", panelWidth - 4), panelWidth - 4), panelWidth));
+          lines.push(overlayStyle.muted("enter send • esc dismiss", panelWidth));
+        } else {
+          choices.forEach((choice, idx) => {
+            const prefix = idx === selected ? "> " : "  ";
+            const text = `${prefix}${choice.label}`;
+            lines.push(idx === selected ? overlayStyle.accent(padAnsi(truncateToWidth(text, panelWidth), panelWidth)) : overlayStyle.line(text, panelWidth));
+          });
+          lines.push(overlayStyle.muted("↑↓ choose • enter select • esc dismiss", panelWidth));
+        }
+        lines.push(overlayStyle.border(panelWidth));
+        return lines;
+      },
+      invalidate: () => {},
+      handleInput: async (data: string) => {
+        try {
+          if (matchesKey(data, Key.escape) || matchesKey(data, Key.ctrl("c"))) {
+            await submitResponse(request, { kind: "dismiss" });
+            return finish();
+          }
+          if (customMode) {
+            if (matchesKey(data, Key.enter)) {
+              if (draft.trim()) await submitResponse(request, { kind: "custom", text: draft.trim() });
+              return finish();
+            }
+            if (matchesKey(data, Key.backspace)) draft = draft.slice(0, -1);
+            else if (data >= " " && !data.startsWith("\x1b")) draft += data;
+            tui.requestRender();
+            return;
+          }
+          if (matchesKey(data, Key.up)) selected = Math.max(0, selected - 1);
+          else if (matchesKey(data, Key.down)) selected = Math.min(choices.length - 1, selected + 1);
+          else if (matchesKey(data, Key.enter)) {
+            const choice = choices[selected];
+            if (choice.custom) { customMode = true; tui.requestRender(); return; }
+            await submitResponse(request, { kind: "choice", choiceId: choice.id, text: choice.send ?? choice.label });
+            return finish();
+          }
+          tui.requestRender();
+        } catch (err: any) {
+          ctx.ui.notify(`comms response failed: ${err?.message ?? err}`, "error");
+          finish();
+        }
+      },
+    };
+  }, { overlay: true, overlayOptions: { anchor: modalAnchorOption(modalConfig), offsetY: modalOffsetYOption(modalConfig), width: modalWidthOption(modalConfig), maxHeight: modalHeightOption(modalConfig) } });
+  activeModalRequestId = undefined;
+}
+
+async function pollActiveRequests(ctx: ExtensionContext) {
+  if (!consumerEnabled || activeModalRequestId || discoveredFrom.size === 0) return;
+  const from = [...discoveredFrom].join(",");
+  const data = await api<{ requests: InteractionRequest[] }>(`/api/requests/active?from=${encodeURIComponent(from)}`);
+  const next = data.requests[0];
+  if (next) void showInteractionModal(ctx, next);
+}
+
+async function pollResponses(pi: ExtensionAPI, ctx: ExtensionContext) {
+  if (!producerFrom) return;
+  const qs = lastResponseSince ? `?from=${encodeURIComponent(producerFrom)}&since=${encodeURIComponent(lastResponseSince)}` : `?from=${encodeURIComponent(producerFrom)}`;
+  const data = await api<{ responses: InteractionResponse[] }>(`/api/responses${qs}`);
+  for (const response of data.responses) {
+    if (processedResponses.has(response.id)) continue;
+    processedResponses.add(response.id);
+    if (response.receivedAt) lastResponseSince = response.receivedAt;
+    if (response.response.kind === "dismiss") continue;
+    const text = response.response.text?.trim();
+    if (!text) continue;
+    if (ctx.isIdle()) pi.sendUserMessage(text);
+    else pi.sendUserMessage(text, { deliverAs: "followUp" });
+  }
+}
+
+function stopTimers() {
+  if (consumerTimer) clearInterval(consumerTimer);
+  if (responseTimer) clearInterval(responseTimer);
+  consumerTimer = undefined;
+  responseTimer = undefined;
+}
+
+async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
+  currentCtx = ctx;
+  producerFrom = await ensureProducerFrom(ctx);
+  emitMarker(pi, ctx);
+  stopTimers();
+  consumerTimer = setInterval(() => { if (currentCtx) pollActiveRequests(currentCtx).catch(() => {}); }, 1200);
+  responseTimer = setInterval(() => { if (currentCtx) pollResponses(pi, currentCtx).catch(() => {}); }, 1200);
+}
+
+async function createInteractionRequest(payload: InteractionRequest["payload"]) {
+  if (!producerFrom) throw new Error("comms not initialized");
+  const id = randomUUID();
+  await api("/api/requests", {
+    method: "POST",
+    body: JSON.stringify({ id, from: producerFrom, kind: "choice", payload, createdAt: new Date().toISOString() }),
+  });
+  return id;
+}
+
+async function createTestRequest(ctx: ExtensionContext) {
+  await createInteractionRequest({
+    title: "Comms test",
+    body: "Choose a response. Selecting one sends a user message back into Pi.",
+    choices: [
+      { id: "ok", label: "Say it works", send: "comms test worked" },
+      { id: "custom", label: "Type response…", custom: true },
+    ],
+  });
+  ctx.ui.notify("comms test request created", "info");
+}
+
+export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "create_interaction_request",
+    label: "Create Interaction Request",
+    description: "Create a generic Scryer interaction request for the current Pi session.",
+    parameters: Type.Object({
+      title: Type.String(),
+      body: Type.Optional(Type.String()),
+      choices: Type.Array(Type.Object({
+        label: Type.String(),
+        send: Type.Optional(Type.String()),
+        custom: Type.Optional(Type.Boolean()),
+      })),
+    }),
+    async execute(_toolCallId, params) {
+      const choices = params.choices.map((choice, idx) => ({
+        id: `choice-${idx + 1}`,
+        label: choice.label,
+        send: choice.send,
+        custom: choice.custom,
+      }));
+      const id = await createInteractionRequest({ title: params.title, body: params.body, choices });
+      return { content: [{ type: "text", text: `Created interaction request ${id}` }], details: { id, from: producerFrom } };
+    },
+  });
+
+  pi.on("session_start", async (_event, ctx) => { await startComms(pi, ctx); });
+  pi.on("session_shutdown", async () => { stopTimers(); currentCtx = undefined; activeModalRequestId = undefined; });
+
+  pi.registerCommand("comms-init", {
+    description: "Reinitialize Scryer interaction comms producer and local TUI consumer",
+    handler: async (_args, ctx) => {
+      consumerEnabled = true;
+      await startComms(pi, ctx);
+      ctx.ui.notify("comms initialized", "info");
+    },
+  });
+  pi.registerCommand("comms-disable", {
+    description: "Disable local Pi TUI interaction modals for this session only",
+    handler: async (_args, ctx) => { consumerEnabled = false; ctx.ui.notify("comms TUI consumer disabled for this session", "info"); },
+  });
+  pi.registerCommand("comms-enable", {
+    description: "Enable local Pi TUI interaction modals for this session",
+    handler: async (_args, ctx) => { consumerEnabled = true; ctx.ui.notify("comms TUI consumer enabled", "info"); },
+  });
+  pi.registerCommand("comms-status", {
+    description: "Show Scryer interaction comms status",
+    handler: async (_args, ctx) => {
+      ctx.ui.notify(`comms: producer=${producerFrom ?? "none"} discovered=${[...discoveredFrom].join(",") || "none"} consumer=${consumerEnabled ? "on" : "off"}`, "info");
+    },
+  });
+  pi.registerCommand("comms-test", {
+    description: "Create a local test interaction request",
+    handler: async (_args, ctx) => {
+      try { await createTestRequest(ctx); }
+      catch (err: any) { ctx.ui.notify(`comms test failed: ${err?.message ?? err}`, "error"); }
+    },
+  });
+}

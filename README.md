@@ -5,6 +5,7 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 ## Extensions
 
 - `scryer/` — Scryer PM context, project/ticket pickers, `/save`, `/update`, `/deets`, and recorder autosave.
+- `comms/` — Scryer interaction-service producer/consumer: emits producer markers, polls interaction requests/responses, and renders cockpit-style TUI prompts.
 - `read-md.ts` — `/read [path]` and `ctrl+k` Markdown picker/viewer for human reading, no LM context injection.
 - `smart-status.ts` — `/status` command with model/context/session usage and Codex quota bars.
 - `switch-to.ts` — `/switchTo` command to pick a session for the current folder and resume from a tree point.
@@ -33,5 +34,7 @@ Reload in pi:
 ## Notes
 
 The Scryer PM extension defaults to `http://100.105.192.98:43210`. Override with `SCRYER_PM_URL` when needed.
+
+The comms extension defaults to `http://127.0.0.1:43217`. Override with `SCRYER_INTERACTIONS_URL` when needed.
 
 `starship-footer.ts` expects `starship` in PATH. It uses `gh` when available to show the current branch PR number, and shows the current session's latest touched commit.
