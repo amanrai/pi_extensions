@@ -980,7 +980,10 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("input", async (event, ctx) => {
 		state ??= await loadState(pi, ctx);
-		if (!scryerBusy && !(await ensureScryerContext(ctx, "input"))) return { action: "handled" as const };
+		// Disabled for smux/iPad usability: do not interrupt normal input with
+		// keyboard-driven project/ticket pickers. Manual selection remains
+		// available via /pp, /pt, and related Scryer commands.
+		// if (!scryerBusy && !(await ensureScryerContext(ctx, "input"))) return { action: "handled" as const };
 		if (!scryerBusy) return { action: "continue" as const };
 		queuedInputs.push({ text: event.text, images: event.images as any });
 		if (ctx.hasUI) {
