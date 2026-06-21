@@ -1079,6 +1079,40 @@ export default function (pi: ExtensionAPI) {
 	register("ac", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 	register("add-comments", "Add recorder summary as a comment on selected ticket", addActiveTaskComment);
 
+	pi.registerCommand("scryer", {
+		description: "Show available slash commands in a Scryer modal",
+		handler: async (args, ctx) => {
+			try {
+				const filter = args.trim() as "extension" | "prompt" | "skill" | "";
+				const commands = pi.getCommands?.() ?? [];
+				const filtered = filter ? commands.filter((cmd: any) => cmd.source === filter) : commands;
+				const lines: string[] = [];
+				lines.push(`Commands available: ${filtered.length}${filter ? ` (${filter})` : ""}`);
+				lines.push("Built-in TUI commands may not be listed here.");
+				lines.push("");
+				const sources: Array<{ key: string; label: string }> = [
+					{ key: "extension", label: "Extensions" },
+					{ key: "prompt", label: "Prompts" },
+					{ key: "skill", label: "Skills" },
+				];
+				for (const source of sources) {
+					const group = filtered.filter((cmd: any) => cmd.source === source.key).sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)));
+					if (!group.length) continue;
+					lines.push(`## ${source.label}`);
+					for (const cmd of group) {
+						const desc = cmd.description ? ` — ${cmd.description}` : "";
+						const scope = cmd.sourceInfo?.scope ? ` [${cmd.sourceInfo.scope}]` : "";
+						lines.push(`/${cmd.name}${scope}${desc}`);
+					}
+					lines.push("");
+				}
+				await showScrollableModal(ctx, "Scryer commands", lines, "usage: /scryer [extension|prompt|skill]");
+			} catch (err: any) {
+				if (ctx.hasUI) ctx.ui.notify(`Scryer command list failed: ${err?.message ?? err}`, "error");
+			}
+		},
+	});
+
 	pi.registerCommand("modal-config", {
 		description: "Configure modal width/height/top. Usage: /modal-config [width <cols>] [height <rows>] [top <rows>] | /modal-config <cols> <rows> [top] | /modal-config reset",
 		handler: async (args, ctx) => {
