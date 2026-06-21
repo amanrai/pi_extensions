@@ -1,7 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { complete, type UserMessage } from "@earendil-works/pi-ai";
 import { Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { modalAnchorOption, modalHeightOption, modalOffsetYOption, modalWidthOption, readModalConfig } from "../scryer/modal-config.ts";
@@ -36,6 +37,7 @@ type CommsState = {
 const SERVICE_URL = (process.env.SCRYER_INTERACTIONS_URL ?? "http://127.0.0.1:43217").replace(/\/$/, "");
 const STATE_DIR = join(homedir(), ".pi", "agent", "comms");
 const STATE_PATH = join(STATE_DIR, "state.json");
+const INFERENCE_LOG_PATH = join(STATE_DIR, "inference-log.jsonl");
 const MARKER_PREFIX = "@@SCRYER_INTERACTION_PRODUCER_V1@@";
 const MARKER_SUFFIX = "@@END_SCRYER_INTERACTION_PRODUCER@@";
 const MARKER_RE = /^@@SCRYER_INTERACTION_PRODUCER_V1@@(\{[^\r\n]*\})@@END_SCRYER_INTERACTION_PRODUCER@@$/;
@@ -47,6 +49,9 @@ let consumerTimer: NodeJS.Timeout | undefined;
 let responseTimer: NodeJS.Timeout | undefined;
 let activeModalRequestId: string | undefined;
 let lastResponseSince = "";
+let inferenceDelayMs = Number(process.env.SCRYER_COMMS_INFERENCE_DELAY_MS ?? 30_000);
+let pendingInference: { timer?: NodeJS.Timeout; abort?: AbortController; token: number } | undefined;
+let inferenceToken = 0;
 const discoveredFrom = new Set<string>();
 const processedResponses = new Set<string>();
 
@@ -111,6 +116,68 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${SERVICE_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return await res.json() as T;
+}
+
+async function logInference(row: Record<string, unknown>) {
+  await mkdir(STATE_DIR, { recursive: true });
+  await appendFile(INFERENCE_LOG_PATH, `${JSON.stringify({ ts: new Date().toISOString(), from: producerFrom, ...row })}\n`);
+}
+
+function textFromMessage(message: any): string {
+  if (!message) return "";
+  if (typeof message.content === "string") return message.content;
+  if (Array.isArray(message.content)) return message.content
+    .filter((part: any) => part?.type === "text" && typeof part.text === "string")
+    .map((part: any) => part.text)
+    .join("\n");
+  return "";
+}
+
+function recentConversation(ctx: ExtensionContext) {
+  const branch = ctx.sessionManager.getBranch();
+  const items: { role: "user" | "assistant"; text: string }[] = [];
+  let users = 0;
+  let assistants = 0;
+  for (let i = branch.length - 1; i >= 0 && (users < 3 || assistants < 3); i--) {
+    const entry: any = branch[i];
+    if (entry?.type !== "message") continue;
+    const role = entry.message?.role;
+    if (role !== "user" && role !== "assistant") continue;
+    if (role === "user" && users >= 3) continue;
+    if (role === "assistant" && assistants >= 3) continue;
+    const text = textFromMessage(entry.message).trim();
+    if (!text) continue;
+    if (role === "user") users += 1;
+    else assistants += 1;
+    items.push({ role, text });
+  }
+  return items.reverse();
+}
+
+function cancelPendingInference(reason: string) {
+  if (!pendingInference) return;
+  if (pendingInference.timer) clearTimeout(pendingInference.timer);
+  pendingInference.abort?.abort();
+  void logInference({ event: "cancelled", reason, token: pendingInference.token });
+  pendingInference = undefined;
+}
+
+function extractJson(text: string) {
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
+  const raw = fenced?.[1] ?? text;
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end < start) throw new Error("no JSON object in inference response");
+  return JSON.parse(raw.slice(start, end + 1));
+}
+
+function normalizeChoices(choices: any[]): InteractionChoice[] {
+  return choices.slice(0, 5).map((choice, idx) => ({
+    id: typeof choice.id === "string" && choice.id ? choice.id : `choice-${idx + 1}`,
+    label: String(choice.label ?? choice.send ?? `Choice ${idx + 1}`).slice(0, 120),
+    send: typeof choice.send === "string" ? choice.send : undefined,
+    custom: Boolean(choice.custom),
+  })).filter((choice) => choice.label.trim());
 }
 
 function padAnsi(s: string, width: number) {
@@ -263,6 +330,58 @@ async function createTestRequest(ctx: ExtensionContext) {
   ctx.ui.notify("comms test request created", "info");
 }
 
+const INFERENCE_SYSTEM_PROMPT = `You create interaction prompts for an idle agent session.
+Given recent user/assistant messages, propose concise choices for the user.
+Return ONLY JSON matching:
+{"create":true,"title":"...","body":"...","choices":[{"label":"...","send":"..."},{"label":"Type response","custom":true}]}
+or {"create":false,"reason":"..."}.
+Rules:
+- Usually create suggestions when the assistant appears idle or waiting.
+- Include 2-4 useful choices plus a custom response choice.
+- Choice send text should be exactly what to send back as the next user message.
+- Avoid destructive defaults or risky actions unless the user explicitly asked.`;
+
+async function runInference(ctx: ExtensionContext, token: number, signal: AbortSignal) {
+  if (!ctx.model) return;
+  const messages = recentConversation(ctx);
+  const input = { messages };
+  await logInference({ event: "request", token, model: `${ctx.model.provider}/${ctx.model.id}`, input });
+  const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+  if (!auth.ok || !auth.apiKey) throw new Error(auth.ok ? `No API key for ${ctx.model.provider}` : auth.error);
+  const userMessage: UserMessage = {
+    role: "user",
+    content: [{ type: "text", text: JSON.stringify(input, null, 2) }],
+    timestamp: Date.now(),
+  };
+  const result = await complete(ctx.model, { systemPrompt: INFERENCE_SYSTEM_PROMPT, messages: [userMessage] }, { apiKey: auth.apiKey, headers: auth.headers, signal });
+  const text = result.content.filter((part): part is { type: "text"; text: string } => part.type === "text").map((part) => part.text).join("\n");
+  const parsed = extractJson(text);
+  await logInference({ event: "response", token, stopReason: result.stopReason, raw: text, parsed });
+  if (signal.aborted || pendingInference?.token !== token) return;
+  if (!parsed?.create) return;
+  const choices = Array.isArray(parsed.choices) ? normalizeChoices(parsed.choices) : [];
+  if (!choices.some((choice) => choice.custom)) choices.push({ id: "custom", label: "Type response…", custom: true });
+  await createInteractionRequest({
+    title: String(parsed.title ?? "Next step?"),
+    body: String(parsed.body ?? "The agent is waiting for direction."),
+    choices,
+  });
+  await logInference({ event: "created", token });
+}
+
+function scheduleInference(ctx: ExtensionContext) {
+  cancelPendingInference("superseded");
+  const token = ++inferenceToken;
+  const abort = new AbortController();
+  pendingInference = { token, abort };
+  pendingInference.timer = setTimeout(() => {
+    const active = pendingInference;
+    if (!active || active.token !== token) return;
+    active.timer = undefined;
+    runInference(ctx, token, abort.signal).catch((err) => logInference({ event: "error", token, error: err?.message ?? String(err) }));
+  }, inferenceDelayMs);
+}
+
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "create_interaction_request",
@@ -290,7 +409,17 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("session_start", async (_event, ctx) => { await startComms(pi, ctx); });
-  pi.on("session_shutdown", async () => { stopTimers(); currentCtx = undefined; activeModalRequestId = undefined; });
+  pi.on("input", async () => {
+    cancelPendingInference("user-input");
+    return { action: "continue" as const };
+  });
+  pi.on("message_end", async (event, ctx) => {
+    const msg: any = event.message;
+    if (msg?.role !== "assistant") return;
+    if (msg.stopReason && msg.stopReason !== "stop") return;
+    scheduleInference(ctx);
+  });
+  pi.on("session_shutdown", async () => { cancelPendingInference("shutdown"); stopTimers(); currentCtx = undefined; activeModalRequestId = undefined; });
 
   pi.registerCommand("comms-init", {
     description: "Reinitialize Scryer interaction comms producer and local TUI consumer",
@@ -315,10 +444,22 @@ export default function (pi: ExtensionAPI) {
     description: "Disable local Pi TUI interaction modals for this session only",
     handler: async (_args, ctx) => { consumerEnabled = false; ctx.ui.notify("comms TUI consumer disabled for this session", "info"); },
   });
+  pi.registerCommand("comms-delay", {
+    description: "Set current-session comms inference delay in seconds. Usage: /comms-delay 30",
+    handler: async (args, ctx) => {
+      const seconds = Number(String(args ?? "").trim());
+      if (!Number.isFinite(seconds) || seconds < 0) {
+        ctx.ui.notify(`comms inference delay: ${Math.round(inferenceDelayMs / 1000)}s`, "info");
+        return;
+      }
+      inferenceDelayMs = Math.floor(seconds * 1000);
+      ctx.ui.notify(`comms inference delay set to ${seconds}s for this session`, "info");
+    },
+  });
   pi.registerCommand("comms-status", {
     description: "Show Scryer interaction comms status",
     handler: async (_args, ctx) => {
-      ctx.ui.notify(`comms: producer=${producerFrom ?? "none"} discovered=${[...discoveredFrom].join(",") || "none"} consumer=${consumerEnabled ? "on" : "off"}`, "info");
+      ctx.ui.notify(`comms: producer=${producerFrom ?? "none"} discovered=${[...discoveredFrom].join(",") || "none"} consumer=${consumerEnabled ? "on" : "off"} delay=${Math.round(inferenceDelayMs / 1000)}s`, "info");
     },
   });
   pi.registerCommand("comms-test", {
