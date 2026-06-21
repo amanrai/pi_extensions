@@ -58,6 +58,7 @@ let producerFrom: string | undefined;
 let consumerEnabled = false;
 let consumerTimer: NodeJS.Timeout | undefined;
 let responseTimer: NodeJS.Timeout | undefined;
+let terminalInputUnsubscribe: (() => void) | undefined;
 let activeModalRequestId: string | undefined;
 let lastResponseSince = "";
 let inferenceDelayMs = Number(process.env.SCRYER_COMMS_INFERENCE_DELAY_MS ?? 30_000);
@@ -176,6 +177,12 @@ function cancelPendingInference(reason: string) {
   pendingInference.abort?.abort();
   void logInference({ event: "cancelled", reason, token: pendingInference.token });
   pendingInference = undefined;
+}
+
+function editorHasDraft(ctx: ExtensionContext) {
+  if (!ctx.hasUI || ctx.mode !== "tui") return false;
+  try { return Boolean(ctx.ui.getEditorText?.().trim()); }
+  catch { return false; }
 }
 
 function cancelPendingUpdateInference(reason: string) {
@@ -324,8 +331,10 @@ async function pollResponses(pi: ExtensionAPI, ctx: ExtensionContext) {
 function stopTimers() {
   if (consumerTimer) clearInterval(consumerTimer);
   if (responseTimer) clearInterval(responseTimer);
+  terminalInputUnsubscribe?.();
   consumerTimer = undefined;
   responseTimer = undefined;
+  terminalInputUnsubscribe = undefined;
 }
 
 async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
@@ -338,6 +347,12 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   stopTimers();
   consumerTimer = setInterval(() => { if (currentCtx) pollActiveRequests(currentCtx).catch(() => {}); }, 1200);
   responseTimer = setInterval(() => { if (currentCtx) pollResponses(pi, currentCtx).catch(() => {}); }, 1200);
+  if (ctx.hasUI && ctx.mode === "tui") {
+    terminalInputUnsubscribe = ctx.ui.onTerminalInput(() => {
+      if (pendingInference) cancelPendingInference("terminal-input");
+      if (pendingUpdateInference) cancelPendingUpdateInference("terminal-input");
+    });
+  }
 }
 
 async function createInteractionRequest(payload: InteractionRequest["payload"]) {
@@ -426,6 +441,10 @@ Rules:
 
 async function runInference(ctx: ExtensionContext, token: number, signal: AbortSignal) {
   if (!ctx.model) return;
+  if (editorHasDraft(ctx)) {
+    await logInference({ event: "skipped", token, reason: "editor-draft" });
+    return;
+  }
   const messages = recentConversation(ctx);
   const input = { messages };
   await logInference({ event: "request", token, model: `${ctx.model.provider}/${ctx.model.id}`, input });
@@ -441,6 +460,10 @@ async function runInference(ctx: ExtensionContext, token: number, signal: AbortS
   const parsed = extractJson(text);
   await logInference({ event: "response", token, stopReason: result.stopReason, raw: text, parsed });
   if (signal.aborted || pendingInference?.token !== token) return;
+  if (editorHasDraft(ctx)) {
+    await logInference({ event: "skipped", token, reason: "editor-draft-after-response" });
+    return;
+  }
   if (!parsed?.create) return;
   const choices = Array.isArray(parsed.choices) ? normalizeChoices(parsed.choices) : [];
   if (!choices.some((choice) => choice.custom)) choices.push({ id: "custom", label: "Type response…", custom: true });
@@ -485,6 +508,10 @@ async function runUpdateInference(ctx: ExtensionContext, token: number, signal: 
 
 function scheduleInference(ctx: ExtensionContext) {
   cancelPendingInference("superseded");
+  if (editorHasDraft(ctx)) {
+    void logInference({ event: "skipped", reason: "editor-draft-before-schedule", token: inferenceToken + 1 });
+    return;
+  }
   const token = ++inferenceToken;
   const abort = new AbortController();
   pendingInference = { token, abort };
@@ -492,6 +519,11 @@ function scheduleInference(ctx: ExtensionContext) {
     const active = pendingInference;
     if (!active || active.token !== token) return;
     active.timer = undefined;
+    if (editorHasDraft(ctx)) {
+      void logInference({ event: "skipped", reason: "editor-draft-before-run", token });
+      pendingInference = undefined;
+      return;
+    }
     runInference(ctx, token, abort.signal).catch((err) => logInference({ event: "error", token, error: err?.message ?? String(err) }));
   }, inferenceDelayMs);
 }
