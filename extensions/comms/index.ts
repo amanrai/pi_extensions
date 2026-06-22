@@ -437,6 +437,7 @@ Rules:
 - Optimize for a user who walked away and wants to know current progress, decisions, blockers, waiting states, errors, or completion.
 - Do not narrate trivial conversation turns, greetings, or unchanged state.
 - Keep title under 80 characters and body under 500 characters.
+- If a decision has been taken and a question has been asked, include both in the title.
 - Use blocked/error for problems, waiting when the agent needs user input, done for completed requested work, decision for notable recommendations/choices, progress otherwise.`;
 
 async function runInference(ctx: ExtensionContext, token: number, signal: AbortSignal) {
