@@ -52,7 +52,7 @@ type PmTask = { id: string; title: string; description_md?: string };
 
 const SERVICE_URL = (process.env.SCRYER_INTERACTIONS_URL ?? "http://127.0.0.1:43217").replace(/\/$/, "");
 const PM_URL = (process.env.SCRYER_PM_URL ?? "http://100.105.192.98:43210").replace(/\/$/, "");
-const SESSIONS_PROJECT_SLUG = process.env.SCRYER_SESSIONS_PROJECT_SLUG ?? "sessions";
+const SESSIONS_PROJECT_SLUG = process.env.SCRYER_SESSIONS_PROJECT_SLUG ?? "agent-sessions";
 const SESSIONS_PROJECT_ID = process.env.SCRYER_SESSIONS_PROJECT_ID;
 const SESSIONS_TASK_TYPE_ID = process.env.SCRYER_SESSIONS_TASK_TYPE_ID;
 const STATE_DIR = join(homedir(), ".pi", "agent", "comms");
