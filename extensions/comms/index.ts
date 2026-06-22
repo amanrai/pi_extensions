@@ -43,9 +43,18 @@ type SessionUpdate = {
 
 type CommsState = {
   bySession: Record<string, string>;
+  sessionTaskBySession?: Record<string, string>;
 };
 
+type PmProject = { id: string; name: string; slug?: string; description_md?: string };
+type PmTaskType = { id: string; key?: string; name?: string; is_default?: number | boolean };
+type PmTask = { id: string; title: string; description_md?: string };
+
 const SERVICE_URL = (process.env.SCRYER_INTERACTIONS_URL ?? "http://127.0.0.1:43217").replace(/\/$/, "");
+const PM_URL = (process.env.SCRYER_PM_URL ?? "http://100.105.192.98:43210").replace(/\/$/, "");
+const SESSIONS_PROJECT_SLUG = process.env.SCRYER_SESSIONS_PROJECT_SLUG ?? "sessions";
+const SESSIONS_PROJECT_ID = process.env.SCRYER_SESSIONS_PROJECT_ID;
+const SESSIONS_TASK_TYPE_ID = process.env.SCRYER_SESSIONS_TASK_TYPE_ID;
 const STATE_DIR = join(homedir(), ".pi", "agent", "comms");
 const STATE_PATH = join(STATE_DIR, "state.json");
 const INFERENCE_LOG_PATH = join(STATE_DIR, "inference-log.jsonl");
@@ -133,6 +142,13 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${SERVICE_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return await res.json() as T;
+}
+
+async function pmApi<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${PM_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`PM API ${res.status}: ${text}`);
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 async function logInference(row: Record<string, unknown>) {
@@ -365,7 +381,121 @@ async function createInteractionRequest(payload: InteractionRequest["payload"]) 
   return id;
 }
 
-async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean } = {}) {
+function formatSessionTime(date = new Date()) {
+  return date.toISOString().slice(0, 16).replace("T", " ");
+}
+
+function sessionRepoLabel(ctx: ExtensionContext) {
+  return basename(ctx.cwd || process.cwd()) || "Pi";
+}
+
+function sessionFileLabel(ctx: ExtensionContext) {
+  const file = ctx.sessionManager.getSessionFile?.();
+  return file ? basename(file) : "unknown";
+}
+
+function sessionTaskTitle(ctx: ExtensionContext) {
+  return `Pi Session — ${sessionRepoLabel(ctx)} — ${formatSessionTime()}`;
+}
+
+function initialSessionDescription(ctx: ExtensionContext, key: string) {
+  const lines = [
+    `# ${sessionTaskTitle(ctx)}`,
+    "",
+    `Started: ${new Date().toISOString()}`,
+    `CWD: ${ctx.cwd}`,
+    `Session file: ${sessionFileLabel(ctx)}`,
+    `Producer: ${producerFrom ?? "unknown"}`,
+    `Session key: ${key}`,
+    "",
+    "## Updates",
+    "",
+    "<!-- scryer-comms-updates:start -->",
+    "<!-- scryer-comms-updates:end -->",
+  ];
+  return lines.join("\n");
+}
+
+async function findSessionsProject() {
+  if (SESSIONS_PROJECT_ID) return await pmApi<PmProject>(`/api/projects/${encodeURIComponent(SESSIONS_PROJECT_ID)}`);
+  const projects = await pmApi<PmProject[]>("/api/projects");
+  const slug = SESSIONS_PROJECT_SLUG.toLowerCase();
+  const found = projects.find((project) => String(project.slug ?? "").toLowerCase() === slug || String(project.name ?? "").toLowerCase() === slug);
+  if (!found) throw new Error(`Sessions project not found: ${SESSIONS_PROJECT_SLUG}`);
+  return found;
+}
+
+async function findSessionTaskType(projectId: string) {
+  if (SESSIONS_TASK_TYPE_ID) return SESSIONS_TASK_TYPE_ID;
+  const types = await pmApi<PmTaskType[]>(`/api/task-types?project_id=${encodeURIComponent(projectId)}`);
+  const preferred = types.find((type) => type.key === "work") ?? types.find((type) => type.is_default) ?? types[0];
+  if (!preferred?.id) throw new Error("Sessions project has no task types");
+  return preferred.id;
+}
+
+async function ensureSessionTask(ctx: ExtensionContext) {
+  const key = await sessionKey(ctx);
+  const state = await readState();
+  const existingId = state.sessionTaskBySession?.[key];
+  if (existingId) return existingId;
+
+  const project = await findSessionsProject();
+  const taskTypeId = await findSessionTaskType(project.id);
+  const task = await pmApi<PmTask>("/api/tasks", {
+    method: "POST",
+    body: JSON.stringify({
+      title: sessionTaskTitle(ctx),
+      project_id: project.id,
+      task_type_id: taskTypeId,
+      status: "in_execution",
+      description_md: initialSessionDescription(ctx, key),
+      tag_names: ["pi", "session-log", "comms"],
+      created_by_role: "pi",
+      created_by_instance_key: "comms",
+    }),
+  });
+  state.sessionTaskBySession ??= {};
+  state.sessionTaskBySession[key] = task.id;
+  await writeState(state);
+  await logInference({ event: "session-task-created", taskId: task.id, projectId: project.id, key });
+  return task.id;
+}
+
+function updateEntryMarkdown(update: SessionUpdate) {
+  const created = update.createdAt ?? new Date().toISOString();
+  return [
+    `<!-- scryer-comms-update:id=${update.id} -->`,
+    `### ${created} — ${update.kind} — ${update.title}`,
+    "",
+    update.body.trim(),
+    "",
+  ].join("\n");
+}
+
+function appendUpdateToDescription(description: string | undefined, update: SessionUpdate) {
+  const marker = `<!-- scryer-comms-update:id=${update.id} -->`;
+  const start = "<!-- scryer-comms-updates:start -->";
+  const end = "<!-- scryer-comms-updates:end -->";
+  const base = description?.trim() || ["# Pi Session", "", "## Updates", "", start, end].join("\n");
+  if (base.includes(marker)) return base;
+  const entry = updateEntryMarkdown(update).trimEnd();
+  if (base.includes(start) && base.includes(end)) return base.replace(end, `${entry}\n\n${end}`);
+  return `${base}\n\n## Updates\n\n${start}\n${entry}\n\n${end}`;
+}
+
+async function appendSessionTaskUpdate(ctx: ExtensionContext, update: SessionUpdate) {
+  const taskId = await ensureSessionTask(ctx);
+  const task = await pmApi<PmTask>(`/api/tasks/${encodeURIComponent(taskId)}`);
+  const description_md = appendUpdateToDescription(task.description_md, update);
+  if (description_md === task.description_md) return;
+  await pmApi(`/api/tasks/${encodeURIComponent(taskId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ description_md }),
+  });
+  await logInference({ event: "session-task-updated", taskId, updateId: update.id, kind: update.kind });
+}
+
+async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext } = {}) {
   if (!producerFrom) throw new Error("comms not initialized");
   const normalized = {
     kind: update.kind,
@@ -379,12 +509,18 @@ async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "
   if (!options.force && hash === lastUpdateHash) return undefined;
   if (!options.force && !important && Date.now() - lastUpdatePostAt < 45_000) return undefined;
   const id = randomUUID();
+  const createdAt = new Date().toISOString();
   await api("/api/updates", {
     method: "POST",
-    body: JSON.stringify({ id, from: producerFrom, ...normalized, metadata: update.metadata ?? {}, createdAt: new Date().toISOString() }),
+    body: JSON.stringify({ id, from: producerFrom, ...normalized, metadata: update.metadata ?? {}, createdAt }),
   });
   lastUpdatePostAt = Date.now();
   lastUpdateHash = hash;
+  const ctx = options.ctx ?? currentCtx;
+  if (ctx) {
+    await appendSessionTaskUpdate(ctx, { id, from: producerFrom, ...normalized, metadata: update.metadata ?? {}, createdAt })
+      .catch((err) => logInference({ event: "session-task-error", updateId: id, error: err?.message ?? String(err) }));
+  }
   return id;
 }
 
@@ -413,7 +549,7 @@ async function createTestUpdate(ctx: ExtensionContext) {
     body: "This is a semantic walkaway-monitoring update from the Pi comms extension.",
     level: "info",
     metadata: { source: "manual-test" },
-  }, { force: true });
+  }, { force: true, ctx });
   ctx.ui.notify(`comms test update created${id ? `: ${id}` : ""}`, "info");
 }
 
@@ -503,7 +639,7 @@ async function runUpdateInference(ctx: ExtensionContext, token: number, signal: 
     body: String(parsed.body ?? "The agent made progress."),
     level,
     metadata: { source: "secondary-agent", token },
-  });
+  }, { ctx });
   await logInference({ event: id ? "update-created" : "update-skipped", token, id });
 }
 
