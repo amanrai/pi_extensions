@@ -569,9 +569,11 @@ Return ONLY JSON matching:
 {"create":true,"kind":"progress|decision|blocked|waiting|done|error","title":"...","body":"...","level":"info|success|warning|error"}
 or {"create":false,"reason":"..."}.
 Rules:
-- Create an update only when something meaningful changed since the previous updates.
-- Optimize for a user who walked away and wants to know current progress, decisions, blockers, waiting states, errors, or completion.
-- Do not narrate trivial conversation turns, greetings, or unchanged state.
+- Create an update when something meaningful changed since the previous updates; err on the side of logging useful micro-context.
+- Optimize for decision logging: record decisions made, why they were made, alternatives rejected, assumptions introduced, and follow-up implied by the decision.
+- Also record current progress, blockers, waiting states, errors, or completion when useful.
+- If commits or pushes happened, explicitly include the repo, branch, commit SHA(s), remote/PR if known, and whether the work was pushed.
+- Do not narrate trivial conversation turns or greetings.
 - Keep title under 80 characters and body under 500 characters.
 - If a decision has been taken and a question has been asked, include both in the title.
 - Use blocked/error for problems, waiting when the agent needs user input, done for completed requested work, decision for notable recommendations/choices, progress otherwise.`;
