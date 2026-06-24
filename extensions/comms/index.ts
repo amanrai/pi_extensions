@@ -71,11 +71,12 @@ let terminalInputUnsubscribe: (() => void) | undefined;
 let activeModalRequestId: string | undefined;
 let lastResponseSince = "";
 let inferenceDelayMs = Number(process.env.SCRYER_COMMS_INFERENCE_DELAY_MS ?? 30_000);
-let updateDelayMs = Number(process.env.SCRYER_COMMS_UPDATE_DELAY_MS ?? 8_000);
+let updateBatchTurns = Number.isFinite(Number(process.env.SCRYER_COMMS_UPDATE_BATCH_TURNS)) ? Math.max(1, Math.floor(Number(process.env.SCRYER_COMMS_UPDATE_BATCH_TURNS))) : 3;
 let pendingInference: { timer?: NodeJS.Timeout; abort?: AbortController; token: number } | undefined;
-let pendingUpdateInference: { timer?: NodeJS.Timeout; abort?: AbortController; token: number } | undefined;
 let inferenceToken = 0;
 let updateInferenceToken = 0;
+let semanticUpdateCursor = 0;
+let semanticUpdateRunning = false;
 let lastUpdatePostAt = 0;
 let lastUpdateHash = "";
 const discoveredFrom = new Set<string>();
@@ -199,14 +200,6 @@ function editorHasDraft(ctx: ExtensionContext) {
   if (!ctx.hasUI || ctx.mode !== "tui") return false;
   try { return Boolean(ctx.ui.getEditorText?.().trim()); }
   catch { return false; }
-}
-
-function cancelPendingUpdateInference(reason: string) {
-  if (!pendingUpdateInference) return;
-  if (pendingUpdateInference.timer) clearTimeout(pendingUpdateInference.timer);
-  pendingUpdateInference.abort?.abort();
-  void logInference({ event: "update-cancelled", reason, token: pendingUpdateInference.token });
-  pendingUpdateInference = undefined;
 }
 
 function updateHash(update: Pick<SessionUpdate, "kind" | "title" | "body" | "level">) {
@@ -356,6 +349,8 @@ function stopTimers() {
 async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   currentCtx = ctx;
   producerFrom = await ensureProducerFrom(ctx);
+  semanticUpdateCursor = ctx.sessionManager.getBranch().length;
+  semanticUpdateRunning = false;
   // Do not replay old responses after reload/resume. Comms responses are edge-triggered.
   lastResponseSince = new Date().toISOString();
   processedResponses.clear();
@@ -366,7 +361,6 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   if (ctx.hasUI && ctx.mode === "tui") {
     terminalInputUnsubscribe = ctx.ui.onTerminalInput(() => {
       if (pendingInference) cancelPendingInference("terminal-input");
-      if (pendingUpdateInference) cancelPendingUpdateInference("terminal-input");
     });
   }
 }
@@ -564,17 +558,19 @@ Rules:
 - Choice send text should be exactly what to send back as the next user message.
 - Avoid destructive defaults or risky actions unless the user explicitly asked.`;
 
-const UPDATE_SYSTEM_PROMPT = `You create semantic walkaway-monitoring updates for an agent session.
+const UPDATE_SYSTEM_PROMPT = `You create semantic decision/progress updates for batches of an agent session.
 Return ONLY JSON matching:
-{"create":true,"kind":"progress|decision|blocked|waiting|done|error","title":"...","body":"...","level":"info|success|warning|error"}
-or {"create":false,"reason":"..."}.
+{"updates":[{"kind":"progress|decision|blocked|waiting|done|error","title":"...","body":"...","level":"info|success|warning|error"}]}
+or {"updates":[]}.
 Rules:
-- Create an update when something meaningful changed since the previous updates; err on the side of logging useful micro-context.
+- The input contains a batch of new user/assistant conversation messages plus previous updates for context.
+- Emit zero or more updates; use separate updates for separate decisions, actions, commits, pushes, blockers, or completions.
+- Create updates when something meaningful changed since the previous updates; err on the side of logging useful micro-context.
 - Optimize for decision logging: record decisions made, why they were made, alternatives rejected, assumptions introduced, and follow-up implied by the decision.
 - Also record current progress, blockers, waiting states, errors, or completion when useful.
 - If commits or pushes happened, explicitly include the repo, branch, commit SHA(s), remote/PR if known, and whether the work was pushed.
 - Do not narrate trivial conversation turns or greetings.
-- Keep title under 80 characters and body under 500 characters.
+- Keep each title under 80 characters and each body under 500 characters.
 - If a decision has been taken and a question has been asked, include both in the title.
 - Use blocked/error for problems, waiting when the agent needs user input, done for completed requested work, decision for notable recommendations/choices, progress otherwise.`;
 
@@ -614,12 +610,24 @@ async function runInference(ctx: ExtensionContext, token: number, signal: AbortS
   await logInference({ event: "created", token });
 }
 
-async function runUpdateInference(ctx: ExtensionContext, token: number, signal: AbortSignal) {
+type ConversationMessage = { role: "user" | "assistant"; text: string };
+
+function conversationMessages(ctx: ExtensionContext, startIndex: number, endIndex: number): ConversationMessage[] {
+  return ctx.sessionManager.getBranch().slice(startIndex, endIndex)
+    .filter((entry: any) => entry?.type === "message")
+    .map((entry: any) => ({ role: entry.message?.role, text: textFromMessage(entry.message).trim() }))
+    .filter((message: any): message is ConversationMessage => (message.role === "user" || message.role === "assistant") && Boolean(message.text));
+}
+
+function userTurnCount(messages: ConversationMessage[]) {
+  return messages.filter((message) => message.role === "user").length;
+}
+
+async function runUpdateInference(ctx: ExtensionContext, token: number, messages: ConversationMessage[]) {
   if (!ctx.model) return;
-  const messages = recentConversation(ctx);
   const previousUpdates = await recentUpdates(5).catch(() => []);
   const input = { messages, previousUpdates };
-  await logInference({ event: "update-request", token, model: `${ctx.model.provider}/${ctx.model.id}`, input });
+  await logInference({ event: "update-request", token, model: `${ctx.model.provider}/${ctx.model.id}`, batchMessages: messages.length, batchUserTurns: userTurnCount(messages), input });
   const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
   if (!auth.ok || !auth.apiKey) throw new Error(auth.ok ? `No API key for ${ctx.model.provider}` : auth.error);
   const userMessage: UserMessage = {
@@ -627,22 +635,25 @@ async function runUpdateInference(ctx: ExtensionContext, token: number, signal: 
     content: [{ type: "text", text: JSON.stringify(input, null, 2) }],
     timestamp: Date.now(),
   };
-  const result = await complete(ctx.model, { systemPrompt: UPDATE_SYSTEM_PROMPT, messages: [userMessage] }, { apiKey: auth.apiKey, headers: auth.headers, signal });
+  const result = await complete(ctx.model, { systemPrompt: UPDATE_SYSTEM_PROMPT, messages: [userMessage] }, { apiKey: auth.apiKey, headers: auth.headers });
   const text = result.content.filter((part): part is { type: "text"; text: string } => part.type === "text").map((part) => part.text).join("\n");
   const parsed = extractJson(text);
   await logInference({ event: "update-response", token, stopReason: result.stopReason, raw: text, parsed });
-  if (signal.aborted || pendingUpdateInference?.token !== token) return;
-  if (!parsed?.create) return;
-  const kind = ["progress", "decision", "blocked", "waiting", "done", "error"].includes(parsed.kind) ? parsed.kind : "progress";
-  const level = ["info", "success", "warning", "error"].includes(parsed.level) ? parsed.level : kind === "error" ? "error" : kind === "blocked" || kind === "waiting" ? "warning" : kind === "done" ? "success" : "info";
-  const id = await createSessionUpdate({
-    kind,
-    title: String(parsed.title ?? "Session update"),
-    body: String(parsed.body ?? "The agent made progress."),
-    level,
-    metadata: { source: "secondary-agent", token },
-  }, { ctx });
-  await logInference({ event: id ? "update-created" : "update-skipped", token, id });
+  const updates = Array.isArray(parsed?.updates) ? parsed.updates : (parsed?.create ? [parsed] : []);
+  let created = 0;
+  for (const update of updates) {
+    const kind = ["progress", "decision", "blocked", "waiting", "done", "error"].includes(update?.kind) ? update.kind : "progress";
+    const level = ["info", "success", "warning", "error"].includes(update?.level) ? update.level : kind === "error" ? "error" : kind === "blocked" || kind === "waiting" ? "warning" : kind === "done" ? "success" : "info";
+    const id = await createSessionUpdate({
+      kind,
+      title: String(update?.title ?? "Session update"),
+      body: String(update?.body ?? "The agent made progress."),
+      level,
+      metadata: { source: "secondary-agent", token, batch: true },
+    }, { force: true, ctx });
+    if (id) created += 1;
+  }
+  await logInference({ event: created ? "updates-created" : "updates-skipped", token, count: created });
 }
 
 function scheduleInference(ctx: ExtensionContext) {
@@ -667,17 +678,20 @@ function scheduleInference(ctx: ExtensionContext) {
   }, inferenceDelayMs);
 }
 
-function scheduleUpdateInference(ctx: ExtensionContext) {
-  cancelPendingUpdateInference("superseded");
+function maybeRunUpdateBatch(ctx: ExtensionContext) {
+  if (semanticUpdateRunning) return;
+  const branch = ctx.sessionManager.getBranch();
+  const messages = conversationMessages(ctx, semanticUpdateCursor, branch.length);
+  if (userTurnCount(messages) < updateBatchTurns) return;
+  semanticUpdateCursor = branch.length;
   const token = ++updateInferenceToken;
-  const abort = new AbortController();
-  pendingUpdateInference = { token, abort };
-  pendingUpdateInference.timer = setTimeout(() => {
-    const active = pendingUpdateInference;
-    if (!active || active.token !== token) return;
-    active.timer = undefined;
-    runUpdateInference(ctx, token, abort.signal).catch((err) => logInference({ event: "update-error", token, error: err?.message ?? String(err) }));
-  }, updateDelayMs);
+  semanticUpdateRunning = true;
+  runUpdateInference(ctx, token, messages)
+    .catch((err) => logInference({ event: "update-error", token, error: err?.message ?? String(err) }))
+    .finally(() => {
+      semanticUpdateRunning = false;
+      if (currentCtx) maybeRunUpdateBatch(currentCtx);
+    });
 }
 
 export default function (pi: ExtensionAPI) {
@@ -709,17 +723,16 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => { await startComms(pi, ctx); });
   pi.on("input", async () => {
     cancelPendingInference("user-input");
-    cancelPendingUpdateInference("user-input");
     return { action: "continue" as const };
   });
   pi.on("message_end", async (event, ctx) => {
     const msg: any = event.message;
     if (msg?.role !== "assistant") return;
     if (msg.stopReason && msg.stopReason !== "stop") return;
-    scheduleUpdateInference(ctx);
+    maybeRunUpdateBatch(ctx);
     scheduleInference(ctx);
   });
-  pi.on("session_shutdown", async () => { cancelPendingInference("shutdown"); cancelPendingUpdateInference("shutdown"); stopTimers(); currentCtx = undefined; activeModalRequestId = undefined; });
+  pi.on("session_shutdown", async () => { cancelPendingInference("shutdown"); stopTimers(); currentCtx = undefined; activeModalRequestId = undefined; });
 
   pi.registerCommand("comms-init", {
     description: "Reinitialize Scryer interaction comms producer and local TUI consumer",
@@ -757,21 +770,21 @@ export default function (pi: ExtensionAPI) {
     },
   });
   pi.registerCommand("comms-update-delay", {
-    description: "Set current-session semantic update inference delay in seconds. Usage: /comms-update-delay 8",
+    description: "Set current-session semantic update batch size in user turns. Usage: /comms-update-delay 3",
     handler: async (args, ctx) => {
-      const seconds = Number(String(args ?? "").trim());
-      if (!Number.isFinite(seconds) || seconds < 0) {
-        ctx.ui.notify(`comms update inference delay: ${Math.round(updateDelayMs / 1000)}s`, "info");
+      const turns = Number(String(args ?? "").trim());
+      if (!Number.isFinite(turns) || turns < 1) {
+        ctx.ui.notify(`comms semantic update batch size: ${updateBatchTurns} user turn${updateBatchTurns === 1 ? "" : "s"}`, "info");
         return;
       }
-      updateDelayMs = Math.floor(seconds * 1000);
-      ctx.ui.notify(`comms update inference delay set to ${seconds}s for this session`, "info");
+      updateBatchTurns = Math.max(1, Math.floor(turns));
+      ctx.ui.notify(`comms semantic update batch size set to ${updateBatchTurns} user turn${updateBatchTurns === 1 ? "" : "s"} for this session`, "info");
     },
   });
   pi.registerCommand("comms-status", {
     description: "Show Scryer interaction comms status",
     handler: async (_args, ctx) => {
-      ctx.ui.notify(`comms: producer=${producerFrom ?? "none"} discovered=${[...discoveredFrom].join(",") || "none"} consumer=${consumerEnabled ? "on" : "off"} interactionDelay=${Math.round(inferenceDelayMs / 1000)}s updateDelay=${Math.round(updateDelayMs / 1000)}s`, "info");
+      ctx.ui.notify(`comms: producer=${producerFrom ?? "none"} discovered=${[...discoveredFrom].join(",") || "none"} consumer=${consumerEnabled ? "on" : "off"} interactionDelay=${Math.round(inferenceDelayMs / 1000)}s updateBatchTurns=${updateBatchTurns}`, "info");
     },
   });
   pi.registerCommand("comms-test", {
