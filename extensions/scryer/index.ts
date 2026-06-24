@@ -601,6 +601,13 @@ function deetsMarkdown(): string {
 	return deetsLines().join("\n");
 }
 
+function commsSemanticStatusLine(): string {
+	const status = (globalThis as any).__scryerCommsStatus?.();
+	if (!status?.configured) return "Semantic updates   unavailable";
+	const running = status.running ? "running now" : `${status.remainingUserTurns} user turn${status.remainingUserTurns === 1 ? "" : "s"} left`;
+	return `Semantic updates   ${running}     Batch ${status.userTurns}/${status.batchTurns} user turns (${status.batchMessages ?? 0} msgs)`;
+}
+
 function expandPath(rawPath: string, cwd: string): string {
 	const trimmed = rawPath.trim();
 	if (trimmed.startsWith("~/")) return resolve(homedir(), trimmed.slice(2));
@@ -748,6 +755,7 @@ async function showCockpit(ctx: ExtensionContext) {
 		`Daily    ${dailyProjectLabel()} / ${dailyTicketLabel()}`,
 		`Update   ${ago(state?.lastUpdateAt)}     Save ${ago(state?.lastSaveAt)}`,
 		`Queue    ${pendingSave ? `save queued: ${pendingSave.reason}` : "clear"}     Input ${queuedInputs.length ? `${queuedInputs.length} queued` : "clear"}`,
+		commsSemanticStatusLine(),
 		`Repos    ${repos.size} touched     Commits ${rows.length}`,
 		latest ? `Latest   ${latest.repoName} ${latest.hash.slice(0, 7)} ${latest.subject} · ${ago(latest.timestamp)}` : "Latest   none recorded",
 		"",

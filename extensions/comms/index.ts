@@ -351,6 +351,7 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   producerFrom = await ensureProducerFrom(ctx);
   semanticUpdateCursor = ctx.sessionManager.getBranch().length;
   semanticUpdateRunning = false;
+  publishCommsStatus();
   // Do not replay old responses after reload/resume. Comms responses are edge-triggered.
   lastResponseSince = new Date().toISOString();
   processedResponses.clear();
@@ -678,6 +679,25 @@ function scheduleInference(ctx: ExtensionContext) {
   }, inferenceDelayMs);
 }
 
+function semanticUpdateStatus(ctx = currentCtx) {
+  if (!ctx) return { configured: true, running: semanticUpdateRunning, batchTurns: updateBatchTurns, userTurns: 0, remainingUserTurns: updateBatchTurns };
+  const branch = ctx.sessionManager.getBranch();
+  const messages = conversationMessages(ctx, semanticUpdateCursor, branch.length);
+  const turns = userTurnCount(messages);
+  return {
+    configured: true,
+    running: semanticUpdateRunning,
+    batchTurns: updateBatchTurns,
+    userTurns: turns,
+    remainingUserTurns: Math.max(0, updateBatchTurns - turns),
+    batchMessages: messages.length,
+  };
+}
+
+function publishCommsStatus() {
+  (globalThis as any).__scryerCommsStatus = () => semanticUpdateStatus(currentCtx);
+}
+
 function maybeRunUpdateBatch(ctx: ExtensionContext) {
   if (semanticUpdateRunning) return;
   const branch = ctx.sessionManager.getBranch();
@@ -695,6 +715,7 @@ function maybeRunUpdateBatch(ctx: ExtensionContext) {
 }
 
 export default function (pi: ExtensionAPI) {
+  publishCommsStatus();
   pi.registerTool({
     name: "create_interaction_request",
     label: "Create Interaction Request",
