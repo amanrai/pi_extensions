@@ -77,6 +77,7 @@ let inferenceToken = 0;
 let updateInferenceToken = 0;
 let semanticUpdateCursor = 0;
 let semanticUpdateRunning = false;
+let semanticUpdatePromise: Promise<void> | undefined;
 let lastUpdatePostAt = 0;
 let lastUpdateHash = "";
 const discoveredFrom = new Set<string>();
@@ -603,6 +604,8 @@ async function runInference(ctx: ExtensionContext, token: number, signal: AbortS
   if (!parsed?.create) return;
   const choices = Array.isArray(parsed.choices) ? normalizeChoices(parsed.choices) : [];
   if (!choices.some((choice) => choice.custom)) choices.push({ id: "custom", label: "Type response…", custom: true });
+  await forceSemanticUpdateFlush(ctx).catch((err) => logInference({ event: "forced-update-flush-error", token, error: err?.message ?? String(err) }));
+  if (signal.aborted || pendingInference?.token !== token) return;
   await createInteractionRequest({
     title: String(parsed.title ?? "Next step?"),
     body: String(parsed.body ?? "The agent is waiting for direction."),
@@ -698,20 +701,35 @@ function publishCommsStatus() {
   (globalThis as any).__scryerCommsStatus = () => semanticUpdateStatus(currentCtx);
 }
 
+function startUpdateBatch(ctx: ExtensionContext, messages: ConversationMessage[], reason: string) {
+  semanticUpdateCursor = ctx.sessionManager.getBranch().length;
+  const token = ++updateInferenceToken;
+  semanticUpdateRunning = true;
+  semanticUpdatePromise = runUpdateInference(ctx, token, messages)
+    .catch((err) => logInference({ event: "update-error", token, reason, error: err?.message ?? String(err) }))
+    .finally(() => {
+      semanticUpdateRunning = false;
+      semanticUpdatePromise = undefined;
+      if (currentCtx && reason !== "forced-interaction") maybeRunUpdateBatch(currentCtx);
+    });
+  return semanticUpdatePromise;
+}
+
 function maybeRunUpdateBatch(ctx: ExtensionContext) {
   if (semanticUpdateRunning) return;
   const branch = ctx.sessionManager.getBranch();
   const messages = conversationMessages(ctx, semanticUpdateCursor, branch.length);
   if (userTurnCount(messages) < updateBatchTurns) return;
-  semanticUpdateCursor = branch.length;
-  const token = ++updateInferenceToken;
-  semanticUpdateRunning = true;
-  runUpdateInference(ctx, token, messages)
-    .catch((err) => logInference({ event: "update-error", token, error: err?.message ?? String(err) }))
-    .finally(() => {
-      semanticUpdateRunning = false;
-      if (currentCtx) maybeRunUpdateBatch(currentCtx);
-    });
+  void startUpdateBatch(ctx, messages, "batch");
+}
+
+async function forceSemanticUpdateFlush(ctx: ExtensionContext) {
+  while (semanticUpdatePromise) await semanticUpdatePromise.catch(() => undefined);
+  const branch = ctx.sessionManager.getBranch();
+  const messages = conversationMessages(ctx, semanticUpdateCursor, branch.length);
+  if (!messages.length) return;
+  await logInference({ event: "forced-update-flush", messages: messages.length, userTurns: userTurnCount(messages) });
+  await startUpdateBatch(ctx, messages, "forced-interaction");
 }
 
 export default function (pi: ExtensionAPI) {
