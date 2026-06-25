@@ -937,10 +937,9 @@ async function summarizeAndPersist(reason: string, ctx: ExtensionContext, endSes
 
 		setRecorderProgress(ctx, "checking Scryer destination…");
 		const pmAvailable = await ensurePmReachable(ctx, state, saveState);
-		if (pmAvailable) {
-			await chooseActiveProjectAndTask(ctx);
-			await saveState(state);
-		}
+		// Do not force project/ticket selection during saves. If no active project is
+		// selected, dailyTargetProject()/ensureTicket() will fall back to Dailies.
+		if (pmAvailable) await saveState(state);
 
 		setRecorderProgress(ctx, `saving (${reason}): summarizing with active model…`);
 		const summary = await generateSummary(ctx, reason, endSession);
