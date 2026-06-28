@@ -464,7 +464,7 @@ async function ensureSessionTask(ctx: ExtensionContext) {
       task_type_id: taskTypeId,
       status: "in_execution",
       description_md: initialSessionDescription(ctx, key),
-      tag_names: ["pi", "session-log", "comms"],
+      tag_names: ["pi"],
       created_by_role: "pi",
       created_by_instance_key: "comms",
     }),
