@@ -397,7 +397,17 @@ async function createInteractionRequest(payload: InteractionRequest["payload"]) 
 }
 
 function formatSessionTime(date = new Date()) {
-  return date.toISOString().slice(0, 16).replace("T", " ");
+  const parts = new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${get("timeZoneName")}`.trim();
 }
 
 function sessionRepoLabel(ctx: ExtensionContext) {
