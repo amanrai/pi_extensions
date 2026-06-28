@@ -1,9 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
-import { Container, Key, matchesKey, SelectList, Text, truncateToWidth, type SelectItem } from "@earendil-works/pi-tui";
+import { Container, Key, matchesKey, SelectList, Text, truncateToWidth, visibleWidth, type SelectItem } from "@earendil-works/pi-tui";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { overlayStyle } from "./scryer/overlay-style.ts";
-import { modalAnchorOption, modalBodyRows, modalHeightOption, modalOffsetYOption, modalWidthOption, readModalConfig } from "./scryer/modal-config.ts";
 import { homedir } from "node:os";
 import { basename, relative, resolve } from "node:path";
 
@@ -16,6 +14,30 @@ const TEXT_EXTENSIONS = new Set([
 	".csv", ".tsv", ".gitignore", ".dockerignore", ".editorconfig",
 ]);
 const TEXT_BASENAMES = new Set(["Dockerfile", "Makefile", "README", "LICENSE", "CHANGELOG", "CLAUDE", "AGENTS"]);
+const RESET = "\x1b[0m";
+const BG = "\x1b[48;2;0;0;0m";
+const FG = "\x1b[38;2;255;255;255m";
+const BOLD = "\x1b[1m";
+const CONTENT_PAD = 2;
+const MODAL_OVERLAY_OPTIONS = { anchor: "center" as const, offsetY: 0, width: "90%", maxHeight: "80%" };
+
+function padAnsi(s: string, width: number): string {
+	const v = visibleWidth(s);
+	return v >= width ? truncateToWidth(s, width) : s + " ".repeat(width - v);
+}
+
+function insetLine(s: string, width: number): string {
+	const pad = " ".repeat(Math.min(CONTENT_PAD, Math.floor(width / 4)));
+	const innerWidth = Math.max(1, width - visibleWidth(pad) * 2);
+	return pad + padAnsi(truncateToWidth(s, innerWidth), innerWidth) + pad;
+}
+
+const overlayStyle = {
+	line(s: string, width: number) { return BG + FG + insetLine(s, width) + RESET; },
+	muted(s: string, width?: number) { return width ? BG + FG + insetLine(s, width) + RESET : BG + FG + s + RESET; },
+	title(s: string, width?: number) { return width ? BG + BOLD + FG + insetLine(s, width) + RESET : `${BG}${BOLD}${FG}${s}${RESET}`; },
+	border(width: number) { return BG + FG + "─".repeat(Math.max(1, width)) + RESET; },
+};
 
 function expandPath(input: string, cwd: string): string {
 	const trimmed = input.trim();
@@ -185,13 +207,12 @@ async function readTextFile(path: string): Promise<{ path: string; text: string;
 async function showTextFile(ctx: ExtensionContext, file: string) {
 	const doc = await readTextFile(file);
 	const lines = splitLines(doc.text);
-	const modalConfig = await readModalConfig();
 	await ctx.ui.custom<void>((tui, theme, _kb, done) => {
 		let top = 0;
 		function pageSize() {
 			const terminalHeight = Math.floor((tui as any).height ?? 22);
 			const chromeRows = 4 + (doc.truncated ? 1 : 0);
-			return Math.max(8, modalBodyRows(modalConfig, terminalHeight, chromeRows));
+			return Math.max(8, Math.floor(terminalHeight * 0.8) - chromeRows);
 		}
 		function clamp() { top = Math.max(0, Math.min(top, Math.max(0, lines.length - pageSize()))); }
 		return {
@@ -225,7 +246,7 @@ async function showTextFile(ctx: ExtensionContext, file: string) {
 				tui.requestRender();
 			},
 		};
-	}, { overlay: true, overlayOptions: { anchor: modalAnchorOption(modalConfig), offsetY: modalOffsetYOption(modalConfig), width: modalWidthOption(modalConfig), maxHeight: modalHeightOption(modalConfig) } });
+	}, { overlay: true, overlayOptions: MODAL_OVERLAY_OPTIONS });
 }
 
 async function openRead(ctx: ExtensionContext, args = "") {

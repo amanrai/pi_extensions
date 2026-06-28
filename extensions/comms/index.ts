@@ -5,8 +5,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
-import { modalAnchorOption, modalHeightOption, modalOffsetYOption, modalWidthOption, readModalConfig } from "../scryer/modal-config.ts";
-import { overlayStyle } from "../scryer/overlay-style.ts";
 import { Type } from "typebox";
 
 type InteractionChoice = { id: string; label: string; send?: string; custom?: boolean };
@@ -82,6 +80,28 @@ let lastUpdatePostAt = 0;
 let lastUpdateHash = "";
 const discoveredFrom = new Set<string>();
 const processedResponses = new Set<string>();
+
+const RESET = "\x1b[0m";
+const BG = "\x1b[48;2;0;0;0m";
+const FG = "\x1b[38;2;255;255;255m";
+const BOLD = "\x1b[1m";
+const CONTENT_PAD = 2;
+
+function insetLine(s: string, width: number): string {
+  const pad = " ".repeat(Math.min(CONTENT_PAD, Math.floor(width / 4)));
+  const innerWidth = Math.max(1, width - visibleWidth(pad) * 2);
+  return pad + padAnsi(truncateToWidth(s, innerWidth), innerWidth) + pad;
+}
+
+const overlayStyle = {
+  line(s: string, width: number) { return BG + FG + insetLine(s, width) + RESET; },
+  muted(s: string, width?: number) { return width ? BG + FG + insetLine(s, width) + RESET : BG + FG + s + RESET; },
+  title(s: string, width?: number) { return width ? BG + BOLD + FG + insetLine(s, width) + RESET : `${BG}${BOLD}${FG}${s}${RESET}`; },
+  accent(s: string) { return BG + FG + s + RESET; },
+  border(width: number) { return BG + FG + "─".repeat(Math.max(1, width)) + RESET; },
+};
+
+const MODAL_OVERLAY_OPTIONS = { anchor: "center" as const, offsetY: 0, width: "90%", maxHeight: "80%" };
 
 async function readState(): Promise<CommsState> {
   try { return JSON.parse(await readFile(STATE_PATH, "utf8")) as CommsState; }
@@ -248,7 +268,6 @@ async function submitResponse(request: InteractionRequest, response: Interaction
 async function showInteractionModal(ctx: ExtensionContext, request: InteractionRequest) {
   if (!ctx.hasUI || ctx.mode !== "tui") return;
   activeModalRequestId = request.id;
-  const modalConfig = await readModalConfig();
   const choices = request.payload.choices?.length ? request.payload.choices : [{ id: "custom", label: "Type response…", custom: true }];
   await ctx.ui.custom<void>((tui, _theme, _kb, done) => {
     let selected = 0;
@@ -311,7 +330,7 @@ async function showInteractionModal(ctx: ExtensionContext, request: InteractionR
         }
       },
     };
-  }, { overlay: true, overlayOptions: { anchor: modalAnchorOption(modalConfig), offsetY: modalOffsetYOption(modalConfig), width: modalWidthOption(modalConfig), maxHeight: modalHeightOption(modalConfig) } });
+  }, { overlay: true, overlayOptions: MODAL_OVERLAY_OPTIONS });
   activeModalRequestId = undefined;
 }
 

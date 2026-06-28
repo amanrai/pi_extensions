@@ -13,12 +13,8 @@
 import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
-import { readScryerState } from "./scryer/state.ts";
-import { readLastTouchlogEntry, type TouchLogEntry } from "./scryer/touchlog.ts";
-import type { RecorderState } from "./scryer/types.ts";
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
-import { basename } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -44,49 +40,6 @@ function formatPwd(cwd: string): string {
 // ── Data fetching ────────────────────────────────────────────────────────────
 
 interface PRInfo { number: number; url: string; }
-
-function ago(ts?: number): string | null {
-  if (!ts) return null;
-  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 48) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-function freshness(state: RecorderState): string | null {
-  if (state.activeTaskTitle && state.lastUpdateAt) return `updated ${ago(state.lastUpdateAt)}`;
-  if (state.lastSaveAt) return `saved ${ago(state.lastSaveAt)}`;
-  if (state.lastSaveAttemptAt) return `attempted ${ago(state.lastSaveAttemptAt)}`;
-  return null;
-}
-
-function formatScryerContext(state?: RecorderState): string | null {
-  if (!state) return null;
-  const suffix = freshness(state);
-  const tail = suffix ? dim(` · ${suffix}`) : "";
-  if (state.activeProjectName && state.activeTaskTitle) {
-    return `${green("●")} ${green(`◇ ${state.activeProjectName} / ${state.activeTaskTitle}`)}${tail}`;
-  }
-  if (state.activeProjectName && state.noTicketForSession) {
-    return `${yellow("○")} ${yellow(`◇ ${state.activeProjectName} / no ticket`)}${tail}`;
-  }
-  if (state.activeProjectName) {
-    return `${yellow("○")} ${yellow(`◇ ${state.activeProjectName} / pick ticket`)}${tail}`;
-  }
-  if (state.noProjectForSession) return `${dim("○ ◇ no Scryer project")}${tail}`;
-  return `${yellow("○")} ${yellow("◇ pick Scryer project")}${tail}`;
-}
-
-async function fetchScryerContext(ctx: ExtensionContext): Promise<string | null> {
-  try {
-    return formatScryerContext(await readScryerState(ctx));
-  } catch {
-    return null;
-  }
-}
 
 async function fetchStarshipPrompt(cwd: string, width: number): Promise<string | null> {
   try {
@@ -135,49 +88,24 @@ async function fetchPR(cwd: string): Promise<PRInfo | null> {
   } catch { return null; }
 }
 
-function formatTouchLine(entry: TouchLogEntry | null): string | null {
-  if (!entry) return null;
-  const when = ago(entry.timestamp);
-  const short = entry.hash.slice(0, 7);
-  return dim(`↳ ${entry.repoName || basename(entry.repoRoot)} ${short} ${entry.subject}${when ? ` · ${when}` : ""}`);
-}
-
 // ── Extension ────────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
   let starshipPrompt: string | null = null;
   let pr: PRInfo | null             = null;
-  let lastTouch: TouchLogEntry | null = null;
-  let scryerContext: string | null  = null;
   let thinkingLevel: string         = "off";
   let lastRenderWidth               = 120;
   let requestRender: (() => void) | undefined;
-  let scryerPoll: NodeJS.Timeout | undefined;
 
   async function refreshStarship(cwd: string, width: number) {
     starshipPrompt = await fetchStarshipPrompt(cwd, width);
     requestRender?.();
   }
 
-  async function refreshScryer(ctx: ExtensionContext) {
-    const next = await fetchScryerContext(ctx);
-    if (next !== scryerContext) {
-      scryerContext = next;
-      requestRender?.();
-    }
-  }
-
-  async function refreshTouch(ctx: ExtensionContext) {
-    lastTouch = await readLastTouchlogEntry(ctx) ?? null;
-    requestRender?.();
-  }
-
   async function refreshAll(ctx: ExtensionContext) {
     [pr] = await Promise.all([
       fetchPR(ctx.cwd),
-      refreshTouch(ctx).then(() => null),
       refreshStarship(ctx.cwd, lastRenderWidth).then(() => null),
-      refreshScryer(ctx).then(() => null),
     ]);
     requestRender?.();
   }
@@ -185,9 +113,6 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     thinkingLevel = pi.getThinkingLevel();
     refreshAll(ctx);
-    if (scryerPoll) clearInterval(scryerPoll);
-    scryerPoll = setInterval(() => refreshScryer(ctx), 2000);
-
     ctx.ui.setFooter((tui, _theme, footerData) => {
       requestRender = () => tui.requestRender();
 
@@ -215,8 +140,6 @@ export default function (pi: ExtensionAPI) {
           }
 
           const left = leftParts.join("");
-          const scryerLine = scryerContext;
-
           // ── Right: model ◆ thinking  ↑in ↓out $cost ────────────────────
           const rightParts: string[] = [];
 
@@ -257,9 +180,6 @@ export default function (pi: ExtensionAPI) {
           const right = rightParts.join("");
           const gap = " ".repeat(Math.max(1, width - visibleWidth(left) - visibleWidth(right)));
           const lines = [truncateToWidth(left + gap + right, width)];
-          if (scryerLine) lines.push(truncateToWidth(scryerLine, width));
-          const touchLine = formatTouchLine(lastTouch);
-          if (touchLine) lines.push(truncateToWidth(touchLine, width));
           return lines;
         },
       };
@@ -268,11 +188,6 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("agent_end", (_event, ctx) => {
     refreshAll(ctx);
-  });
-
-  pi.on("session_shutdown", async () => {
-    if (scryerPoll) clearInterval(scryerPoll);
-    scryerPoll = undefined;
   });
 
   pi.on("thinking_level_select", async (event, _ctx) => {
