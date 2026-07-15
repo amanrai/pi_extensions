@@ -6,7 +6,6 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 
 - `scryer/` — Scryer PM context, project/ticket selection (`/pp <project_id>`, `/tp <ticket_id>` with picker fallback), `/save`, `/update`, `/deets`, and recorder autosave.
 - `comms/` — Scryer interaction-service producer/consumer: emits producer markers, polls interaction requests/responses, and renders cockpit-style TUI prompts.
-- `till-done/` — vendored todo tools from `harms-haus/pi-til-done`: `write_todos`, `list_todos`, and `edit_todos`.
 - `read-md.ts` — `/read [path]` and `ctrl+k` Markdown picker/viewer for human reading, no LM context injection.
 - `smart-status.ts` — `/status` command with model/context/session usage and Codex quota bars.
 - `switch-to.ts` — `/switchTo` command to pick a session for the current folder and resume from a tree point.
