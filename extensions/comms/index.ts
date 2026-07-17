@@ -48,7 +48,8 @@ type PmProject = { id: string; name: string; slug?: string; description_md?: str
 type PmTaskType = { id: string; key?: string; name?: string; is_default?: number | boolean };
 type PmTask = { id: string; title: string; description_md?: string };
 
-const SERVICE_URL = (process.env.SCRYER_INTERACTIONS_URL ?? "http://100.105.192.98:43217").replace(/\/$/, "");
+// Default interaction service: henrietta (the visor-gateway container hosts it).
+const SERVICE_URL = (process.env.SCRYER_INTERACTIONS_URL ?? "http://100.112.203.22:43217").replace(/\/$/, "");
 const PM_URL = (process.env.SCRYER_PM_URL ?? "http://100.105.192.98:43210").replace(/\/$/, "");
 const SESSIONS_PROJECT_SLUG = process.env.SCRYER_SESSIONS_PROJECT_SLUG ?? "agent-sessions";
 const SESSIONS_PROJECT_ID = process.env.SCRYER_SESSIONS_PROJECT_ID;
