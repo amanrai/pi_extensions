@@ -7,9 +7,8 @@ Project names/IDs are maintained by the Pi footer extension in:
 This helper maintains on-demand per-project task indexes in:
   ~/.pi/agent/scryer/projects/<project_id>.json
 
-Task IDs should be resolved from these JSON files, not by ad-hoc API searches.
-If a project task index is missing or older than --max-age-seconds, this helper
-refreshes that project's task list once, writes the JSON, then reads IDs from it.
+Task IDs should be resolved by reading these JSON files. This helper only
+refreshes/ensures the per-project JSON index; it does not select task IDs.
 """
 
 from __future__ import annotations
@@ -107,14 +106,6 @@ def slim_task(task: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": task.get("id"),
         "title": task.get("title"),
-        "status": task.get("status"),
-        "project_id": task.get("project_id"),
-        "parent_task_id": task.get("parent_task_id"),
-        "task_type_id": task.get("task_type_id"),
-        "display_order": task.get("display_order"),
-        "updated_at": task.get("updated_at"),
-        "created_at": task.get("created_at"),
-        "tags": [t.get("name") for t in task.get("tags", []) if isinstance(t, dict) and t.get("name")],
     }
 
 
@@ -133,42 +124,24 @@ def refresh_project_tasks(project_id: str, project_name: str | None = None) -> d
     return data
 
 
-def ensure_project_tasks(project_id: str, project_name: str | None, max_age_seconds: int) -> dict[str, Any]:
+def ensure_project_tasks(project_id: str, project_name: str | None, max_age_seconds: int) -> tuple[dict[str, Any], bool]:
     path = project_tasks_path(project_id)
     age = cache_age_seconds(path)
     if age is None or age > max_age_seconds:
-        return refresh_project_tasks(project_id, project_name)
-    return load_json(path)
+        return refresh_project_tasks(project_id, project_name), True
+    return load_json(path), False
 
 
-def find_task(project_id: str, query: str, max_age_seconds: int, project_name: str | None = None) -> dict[str, Any]:
-    data = ensure_project_tasks(project_id, project_name, max_age_seconds)
-    tasks = data.get("tasks", [])
-    q = normalize(query)
-
-    exact = [t for t in tasks if str(t.get("id", "")) == query or normalize(str(t.get("title", ""))) == q]
-    if len(exact) == 1:
-        return exact[0]
-    if len(exact) > 1:
-        raise SystemExit(json.dumps({"error": "ambiguous_task", "matches": exact}, indent=2))
-
-    contains = [t for t in tasks if q in normalize(str(t.get("title", "")))]
-    if len(contains) == 1:
-        return contains[0]
-    if contains:
-        raise SystemExit(json.dumps({"error": "ambiguous_task", "matches": contains}, indent=2))
-
-    # Refresh once even if the cache was fresh, then search the refreshed JSON.
-    data = refresh_project_tasks(project_id, project_name)
-    tasks = data.get("tasks", [])
-    exact = [t for t in tasks if str(t.get("id", "")) == query or normalize(str(t.get("title", ""))) == q]
-    contains = [t for t in tasks if q in normalize(str(t.get("title", "")))] if not exact else []
-    matches = exact or contains
-    if len(matches) == 1:
-        return matches[0]
-    if matches:
-        raise SystemExit(json.dumps({"error": "ambiguous_task_after_refresh", "matches": matches}, indent=2))
-    raise SystemExit(json.dumps({"error": "task_not_found_in_project_cache", "project_id": project_id, "query": query}, indent=2))
+def task_cache_summary(data: dict[str, Any], refreshed: bool) -> dict[str, Any]:
+    project_id = str(data.get("project_id", ""))
+    return {
+        "project_id": project_id,
+        "project_name": data.get("project_name"),
+        "updated_at": data.get("updated_at"),
+        "task_count": len(data.get("tasks", [])),
+        "refreshed": refreshed,
+        "path": str(project_tasks_path(project_id)) if project_id else None,
+    }
 
 
 def main() -> int:
@@ -182,14 +155,8 @@ def main() -> int:
     p.add_argument("project_id")
     p.add_argument("--project-name")
 
-    p = sub.add_parser("ensure-project-tasks", help="Refresh project task index if missing/stale, then print it")
+    p = sub.add_parser("ensure-project-tasks", help="Refresh project task index if missing/stale, then print a compact summary")
     p.add_argument("project_id")
-    p.add_argument("--project-name")
-    p.add_argument("--max-age-seconds", type=int, default=DEFAULT_MAX_AGE_SECONDS)
-
-    p = sub.add_parser("find-task", help="Resolve a task/ticket/story title or ID from a project's JSON index")
-    p.add_argument("project_id")
-    p.add_argument("query")
     p.add_argument("--project-name")
     p.add_argument("--max-age-seconds", type=int, default=DEFAULT_MAX_AGE_SECONDS)
 
@@ -199,11 +166,11 @@ def main() -> int:
         if args.command == "find-project":
             result = find_project(args.query)
         elif args.command == "refresh-project-tasks":
-            result = refresh_project_tasks(args.project_id, args.project_name)
+            data = refresh_project_tasks(args.project_id, args.project_name)
+            result = task_cache_summary(data, True)
         elif args.command == "ensure-project-tasks":
-            result = ensure_project_tasks(args.project_id, args.project_name, args.max_age_seconds)
-        elif args.command == "find-task":
-            result = find_task(args.project_id, args.query, args.max_age_seconds, args.project_name)
+            data, refreshed = ensure_project_tasks(args.project_id, args.project_name, args.max_age_seconds)
+            result = task_cache_summary(data, refreshed)
         else:
             parser.error("unknown command")
             return 2

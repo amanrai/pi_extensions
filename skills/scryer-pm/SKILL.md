@@ -5,124 +5,163 @@ description: "Use ONLY on explicit user demand to read or modify Scryer/PM-syste
 
 # Scryer PM
 
-Scryer is Aman's API-first project-management system for projects, tickets/stories/tasks, dependencies, comments, goals, notes, attachments, and related collaboration records.
+Scryer is Aman's API-first project-management system. Treat "ticket", "story", "task", and "work item" as user-facing synonyms for Scryer tasks unless context says otherwise.
 
 ## Activation rule
 
-Use this skill only on explicit user demand to interact with Scryer or PM-system records.
+Use this skill only on explicit user demand to interact with Scryer/PM records.
 
-Explicit demand includes:
+Use it for phrases like:
 
 - "Scryer", "PM system", "project management system"
 - "look at the ticket", "find the ticket", "what does the ticket say?"
 - "update the ticket/story/task", "add a comment to the ticket"
 - "record this", "track this", "create a ticket/story/task" in a PM-record context
-- requests involving a specific Scryer project/task/goal/checklist/comment ID
+- explicit Scryer project/task/goal/checklist/comment IDs
 
-Do not use this skill for:
+Do not use it for general project-management advice, ordinary code work, local TODOs, or casual mentions of "project/task/goal/story/ticket" without PM-record intent. If ambiguous, ask whether the user means Scryer before calling the API.
 
-- general project-management advice
-- local code work where "project" means the repo or codebase
-- ordinary planning/todo lists outside Scryer
-- casual mentions of "task", "project", "goal", "story", or "ticket" without a request to inspect or change a tracked PM record
+## Default behavior: be narrow
 
-If the user intent is ambiguous, ask whether they mean Scryer before calling the API.
+For ordinary ticket lookup, do not read extra reference files. This `SKILL.md` contains the default workflow.
 
-## Operating principles
+Default ticket lookup should fetch only:
 
-- Read before writing. Resolve names/titles to exact IDs before mutation.
-- Never guess IDs. If there are multiple plausible records, show the candidates and ask the user to choose.
-- Confirm before destructive actions: `DELETE`, bulk edits, moving many tasks, deleting comments/notes/attachments, or changing parent/project relationships.
-- Prefer comments for progress/status notes so history is preserved. Use `PATCH` for canonical field changes such as title, description, status, parent, tags, or completion.
-- Use minimal PATCH bodies containing only fields that should change.
-- When creating records, set actor fields consistently:
-  - `created_by_role` / `author_role` / `actor_role`: usually `pi-agent` unless the user specifies otherwise.
-  - `created_by_instance_key` / `author_instance_key` / `actor_instance_key`: use a stable local identifier if available; otherwise use `pi`.
-- Summarize API results in human terms. Include IDs when they will be useful for follow-up.
+1. project ID from local project cache
+2. task ID from per-project task-name cache
+3. authoritative task details from API
+4. task comments from API
 
-## Project ID cache
+Do not fetch blockers, children/subtasks, properties, repo files, git status, source files, or handoff files by default.
 
-The Pi footer extension refreshes Scryer project names/IDs every 30 seconds and writes them to:
+After fetching the Scryer ticket and comments, explain what the ticket says and then offer local follow-up, for example:
+
+> I found the Scryer ticket **"..."**. It says [...brief description/status/comments...]. I have not looked at the local repo, git state, source files, or handoff files yet. Want me to inspect the codebase or handoffs for implementation context?
+
+## Cache rules
+
+### Project cache
+
+The footer extension refreshes project names/IDs every 30 seconds and writes:
 
 ```text
 ~/.pi/agent/scryer/projects.json
 ```
 
-When resolving a project name to an ID, read this file first. Re-read it each time you need project-name resolution or before a meaningful Scryer operation; do not assume a project list you loaded earlier in the conversation is still current. It contains:
+Re-read this file each time project-name resolution matters. Do not rely on a project list loaded earlier in the conversation. Only call `GET /api/projects` if the freshly re-read cache is missing/unreadable or the requested project is absent.
 
-```json
-{
-  "base_url": "http://100.105.192.98:43210",
-  "updated_at": "...",
-  "refresh_interval_ms": 30000,
-  "projects": [{ "id": "...", "name": "..." }]
-}
-```
+### Per-project task ID cache
 
-Only call `GET /api/projects` if the freshly re-read cache file is missing/unreadable or the requested project is not present in the cached list, which usually means it was created less than one refresh interval ago or the footer extension is not active.
-
-Per-project task/ticket/story indexes live at:
+Per-project task-name indexes live at:
 
 ```text
 ~/.pi/agent/scryer/projects/<project_id>.json
 ```
 
-For task/ticket/story ID resolution, use this per-project JSON file. If it does not exist or is older than 10 minutes, refresh it with `GET /api/projects/{project_id}/tasks` and write the JSON first. Then resolve the task ID by reading the JSON. If the task is not present in the JSON, refresh that project task index once from the API, write the updated JSON, and search the JSON again. This handles newly created tickets that are not in the local cache yet.
+This cache is only for ticket/story/task name → ID lookup. It should contain only task IDs and task titles/names, not task status, tags, descriptions, timestamps, or other details.
 
-Do not resolve task IDs by calling global task search/list endpoints when project context is available. The API call is only for refreshing the project's JSON index; the ID you use for updates should be read from the JSON after refresh. The goal is to minimize unnecessary broad API calls, not to avoid the API entirely: use narrow API calls when needed for cache refresh, authoritative task details, comments, or writes.
+Full task details always come from the API after ID resolution:
 
-## API access
+```http
+GET /api/tasks/{task_id}
+```
 
-Default base URL:
+If the per-project task cache is missing or older than 10 minutes, refresh it with:
+
+```http
+GET /api/projects/{project_id}/tasks
+```
+
+Then write the minimal JSON and read/search the JSON for the ID. If the ticket is not in the JSON, refresh that project task cache once from the API, write it, and search the JSON again. Report that a ticket does not exist only after checking both the existing cache and a refreshed API-backed cache.
+
+The goal is to minimize unnecessary broad API calls, not to avoid the API entirely. Use narrow API calls when needed for cache refresh, authoritative details, comments, or writes. Avoid global `GET /api/tasks` for ID lookup when project context exists.
+
+## Helper commands
+
+Resolve relative paths from the skill directory. In an installed package this is usually:
 
 ```text
-http://100.105.192.98:43210
+~/.pi/agent/git/github.com/amanrai/pi_extensions/skills/scryer-pm
 ```
 
-Prefer environment override if present:
+Use the API helper for authoritative reads/writes:
 
 ```bash
-${SCRYER_API_BASE_URL:-${PI_PM_API_BASE_URL:-http://100.105.192.98:43210}}
+python scripts/scryer_api.py GET /api/tasks/<task_id>
+python scripts/scryer_api.py GET /api/tasks/<task_id>/comments
+python scripts/scryer_api.py POST /api/comments --json '{"author_role":"pi-agent","author_instance_key":"pi","body_md":"...","task_id":"..."}'
+python scripts/scryer_api.py PATCH /api/tasks/<task_id> --json '{"status":"in_execution"}'
 ```
 
-You may use direct HTTP calls or the bundled helper:
+Use the cache helper only to resolve projects or refresh/ensure the per-project task ID cache:
 
 ```bash
-python skills/scryer-pm/scripts/scryer_api.py GET /api/projects
-python skills/scryer-pm/scripts/scryer_api.py GET /api/tasks
-python skills/scryer-pm/scripts/scryer_api.py POST /api/comments --json '{"author_role":"pi-agent","author_instance_key":"pi","body_md":"...","task_id":"..."}'
+python scripts/scryer_cache.py find-project "Chess"
+python scripts/scryer_cache.py ensure-project-tasks <project_id> --project-name "Chess"
 ```
 
-Use the cache helper for project and task/ticket/story ID resolution:
+Do not use a separate task-finding helper as the workflow. Read/search `~/.pi/agent/scryer/projects/<project_id>.json` directly for `{ "id", "title" }`, then call the API for full details.
 
-```bash
-python skills/scryer-pm/scripts/scryer_cache.py find-project "PMSystem"
-python skills/scryer-pm/scripts/scryer_cache.py ensure-project-tasks <project_id>
-python skills/scryer-pm/scripts/scryer_cache.py find-task <project_id> "ticket title"
-```
+## Look at a ticket/story/task
 
-Resolve relative paths from the skill directory. If this skill is installed globally, use the actual skill directory path after loading `SKILL.md`.
+1. Re-read `~/.pi/agent/scryer/projects.json` and resolve the project ID.
+2. Read `~/.pi/agent/scryer/projects/<project_id>.json`.
+3. If that file is missing or older than 10 minutes, run `python scripts/scryer_cache.py ensure-project-tasks <project_id> --project-name "<name>"`.
+4. Search the per-project JSON directly for the ticket/story/task title and read its ID.
+5. If not found, refresh the project task cache once, re-read the JSON, and search again.
+6. If still not found, report that it was not found and mention that both cache and refreshed API-backed cache were checked.
+7. Fetch authoritative task details: `GET /api/tasks/{task_id}`.
+8. Fetch task comments: `GET /api/tasks/{task_id}/comments`.
+9. Summarize only the Scryer ticket/comments.
+10. Offer to inspect repo/source/git/handoff context, but do not do it yet.
 
-## What to read next
+If the user gives an explicit task ID, you may skip cache ID resolution and fetch `GET /api/tasks/{task_id}` directly.
 
-- For common workflows and decision rules, read `references/workflows.md`.
-- Before creating/updating tasks, read `references/task-taxonomy.md` for valid task statuses and task-type rules; use `references/task-taxonomy.json` for the current project-specific task-type ID snapshot instead of refetching repeatedly.
-- For endpoint summaries and schema fields, read `references/api-reference.md`.
-- For exact OpenAPI details, inspect `references/openapi.json`.
+## Update or comment on a ticket/story/task
 
-## Common starting points
+1. Resolve the task ID using the lookup flow above, unless the user gave an explicit ID.
+2. Fetch authoritative current details: `GET /api/tasks/{task_id}`.
+3. Decide whether this is a comment or field update:
+   - Progress notes, findings, handoff notes, status commentary → `POST /api/comments`.
+   - Canonical field changes such as title, description, status, parent, tags, or type → `PATCH /api/tasks/{task_id}`.
+4. Use minimal PATCH bodies containing only fields to change.
+5. Prefer comments for preserving history.
+6. Confirm before destructive, broad, or ambiguous changes.
 
-- Resolve project names/IDs: re-read `~/.pi/agent/scryer/projects.json` first each time; only fall back to `GET /api/projects` if missing or not found
-- List projects: `GET /api/projects`
-- Avoid global task ID lookup; prefer per-project task JSON caches
-- Refresh a project's task ID cache: `GET /api/projects/{project_id}/tasks`, written to `~/.pi/agent/scryer/projects/<project_id>.json`
-- Resolve task/ticket/story IDs from that per-project JSON cache; refresh first if missing or older than 10 minutes; if not found, refresh once and search the JSON again
-- Get one task/ticket/story after resolving ID from JSON: `GET /api/tasks/{task_id}`
-- Valid task statuses: `unopened`, `in_planning`, `in_execution`, `ready_for_human_review`, `human_reviewed_and_closed`
-- Usual task type names: `Feature`, `Bug`, `Research`, `Debate`, `Work` (IDs are project-specific; consult `references/task-taxonomy.json`)
-- Task comments: `GET /api/tasks/{task_id}/comments`
-- Add a comment: `POST /api/comments`
-- Search/list goals: `GET /api/goals/search`, `GET /api/goals/full`, `GET /api/goals`
-- Health check: `GET /healthz`
+## Create a ticket/story/task
 
-Treat "ticket" and "story" as user-facing synonyms for Scryer tasks unless context shows they mean something else.
+1. Resolve the project ID from `~/.pi/agent/scryer/projects.json`; fall back to `GET /api/projects` only if missing/not found.
+2. Choose a valid status: `unopened`, `in_planning`, `in_execution`, `ready_for_human_review`, or `human_reviewed_and_closed`. When unsure for a new ticket, use `unopened`.
+3. Choose a task type name:
+   - `Feature` for new capabilities/enhancements
+   - `Bug` for defects/regressions
+   - `Research` for investigation/feasibility
+   - `Debate` for decisions/tradeoffs/questions
+   - `Work` for general tickets/stories/tasks
+4. Task type IDs are project-specific. Use `references/task-taxonomy.json` for the current project-specific task-type ID snapshot; fetch that project's task types only if missing/stale/rejected.
+5. Create via `POST /api/projects/{project_id}/tasks` or `POST /api/tasks`.
+6. After creation, refresh the per-project task ID cache so newly-created tickets can be found by name later.
+
+## Optional data: only when asked or clearly needed
+
+- Blockers: call `GET /api/tasks/{task_id}/blockers` only when the user asks about blockers/dependencies or blocker context is clearly implied.
+- Children/subtasks: call `GET /api/tasks/{task_id}/children` only when the user asks about children/subtasks/breakdown or that context is clearly implied.
+- Properties: call `GET /api/tasks/{task_id}/properties` only when explicitly asked for properties, metadata, custom fields, or key/value data. Do not infer this.
+- Repo/source/git inspection: do not run `rg`, `find`, `git status`, or read source files unless the user explicitly asks for codebase/repo/implementation context or accepts your offer.
+- Handoff files: never read handoff files automatically. Only read them when explicitly asked. Handoff files may be stale or irrelevant even if they look like the "latest" handoff in the repo.
+
+## Safety rules
+
+- Never guess IDs. Ask when matches are ambiguous.
+- Confirm before `DELETE`, bulk edits, parent/project moves, deleting comments/notes/attachments, or other destructive operations.
+- Do not silently overwrite descriptions or comments.
+- Summarize API results in human terms and include IDs when useful for follow-up.
+
+## References for uncommon work
+
+Only read these when the user asks for deeper/uncommon operations:
+
+- `references/task-taxonomy.md` / `task-taxonomy.json` — task statuses and project-specific task type IDs
+- `references/api-reference.md` — human-readable endpoint/schema summary
+- `references/openapi.json` — exact OpenAPI snapshot
+- `references/workflows.md` — extended workflows for goals, attachments, notes, tags, properties, blockers, and operational endpoints
