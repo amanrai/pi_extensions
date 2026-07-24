@@ -10,6 +10,18 @@ Before calling `GET /api/projects` to resolve a project name, read the local cac
 
 Use `projects[].name` and `projects[].id` from that file for normal project-name resolution. Re-read the file each time project-name resolution matters; do not hold a stale in-conversation copy across multiple Scryer operations. Only fall back to `GET /api/projects` when the freshly re-read cache file is missing/unreadable or the requested project is absent from the cache, which usually means it is newly created or the extension is not active.
 
+The goal is not to avoid the API completely; it is to minimize unnecessary broad lookups. Hit the API when needed for freshness, full record details, comments, writes, or to refresh a missing/stale cache. Prefer narrow/project-scoped API calls over global searches.
+
+## Task ID cache
+
+Per-project task/ticket/story indexes live at:
+
+```text
+~/.pi/agent/scryer/projects/<project_id>.json
+```
+
+Use these files for task ID resolution. If the file is missing or older than 10 minutes, refresh it with `GET /api/projects/{project_id}/tasks`, write the JSON, then search the JSON. If a task is still not found, refresh that project index once more and search the JSON again; this covers newly-created tickets. Avoid global `GET /api/tasks` for ID lookup unless there is no project context and the user cannot provide one.
+
 ## Identify records safely
 
 1. Determine the entity type from the user's wording:
@@ -18,36 +30,36 @@ Use `projects[].name` and `projects[].id` from that file for normal project-name
    - goal/objective → Scryer goal
    - checklist item/subtask on a goal → goal checklist item
    - note/attachment/comment/tag/blocker → corresponding resource
-2. If the user gives an ID, fetch the record directly.
-3. If the user gives a title/name, list/search the likely collection and match by exact or near-exact title/name.
-4. If multiple candidates match, show concise candidates with IDs and ask the user to choose.
-5. Before writes, fetch the current record so your change is grounded in the latest state.
+2. If the user gives a project name, resolve it from `~/.pi/agent/scryer/projects.json` first.
+3. For task/ticket/story title lookup inside a project, resolve the task ID from `~/.pi/agent/scryer/projects/<project_id>.json`; refresh that project cache if missing/stale or not found.
+4. If the user gives a task ID explicitly, you may fetch that record directly.
+5. If multiple candidates match, show concise candidates with IDs and ask the user to choose.
+6. Before writes, fetch the current record so your change is grounded in the latest state.
 
 ## Look at a ticket/story/task
 
 Use when the user says "look at the ticket", "what does the story say", "find the ticket", etc.
 
 1. If ID is known: `GET /api/tasks/{task_id}`.
-2. Otherwise search/list tasks:
-   - Global: `GET /api/tasks`
-   - In project: `GET /api/projects/{project_id}/tasks` or `GET /api/tasks?project_id=...`
-   - Optional filters: `tag`, `status`
-3. Fetch related context as useful:
+2. Otherwise resolve the project first, then resolve the task ID from `~/.pi/agent/scryer/projects/<project_id>.json`.
+3. If the per-project JSON is missing, older than 10 minutes, or does not contain the ticket/story/task, refresh it with `GET /api/projects/{project_id}/tasks`, write the JSON, and search the JSON again.
+4. Fetch related context as useful:
    - comments: `GET /api/tasks/{task_id}/comments`
    - blockers: `GET /api/tasks/{task_id}/blockers`
    - children: `GET /api/tasks/{task_id}/children`
    - properties: `GET /api/tasks/{task_id}/properties`
-4. Summarize title, status, project, type, description, tags, blockers, and latest comments.
+5. Summarize title, status, project, type, description, tags, blockers, and latest comments.
 
 ## Update a ticket/story/task
 
-1. Fetch the task with `GET /api/tasks/{task_id}`.
-2. Decide whether this should be a comment or a field change:
+1. Resolve the task ID from the per-project JSON cache when the user gives a title/name. If the cache is missing/stale/not found, refresh the project task index once and search the JSON again. If the user gives an explicit task ID, use it directly.
+2. Fetch the authoritative task record with `GET /api/tasks/{task_id}`.
+3. Decide whether this should be a comment or a field change:
    - Progress notes, decisions, findings, and handoff info → `POST /api/comments` with `task_id`.
    - Canonical changes to title/status/description/project/parent/type/tags → `PATCH /api/tasks/{task_id}`.
-3. Use minimal PATCH bodies. Do not rewrite descriptions unless the user asks.
-4. Confirm if the update is destructive, large, or ambiguous.
-5. Report the changed fields and the task ID.
+4. Use minimal PATCH bodies. Do not rewrite descriptions unless the user asks.
+5. Confirm if the update is destructive, large, or ambiguous.
+6. Report the changed fields and the task ID.
 
 ## Create a ticket/story/task
 

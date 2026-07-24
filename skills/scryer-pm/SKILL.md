@@ -61,6 +61,16 @@ When resolving a project name to an ID, read this file first. Re-read it each ti
 
 Only call `GET /api/projects` if the freshly re-read cache file is missing/unreadable or the requested project is not present in the cached list, which usually means it was created less than one refresh interval ago or the footer extension is not active.
 
+Per-project task/ticket/story indexes live at:
+
+```text
+~/.pi/agent/scryer/projects/<project_id>.json
+```
+
+For task/ticket/story ID resolution, use this per-project JSON file. If it does not exist or is older than 10 minutes, refresh it with `GET /api/projects/{project_id}/tasks` and write the JSON first. Then resolve the task ID by reading the JSON. If the task is not present in the JSON, refresh that project task index once from the API, write the updated JSON, and search the JSON again. This handles newly created tickets that are not in the local cache yet.
+
+Do not resolve task IDs by calling global task search/list endpoints when project context is available. The API call is only for refreshing the project's JSON index; the ID you use for updates should be read from the JSON after refresh. The goal is to minimize unnecessary broad API calls, not to avoid the API entirely: use narrow API calls when needed for cache refresh, authoritative task details, comments, or writes.
+
 ## API access
 
 Default base URL:
@@ -83,6 +93,14 @@ python skills/scryer-pm/scripts/scryer_api.py GET /api/tasks
 python skills/scryer-pm/scripts/scryer_api.py POST /api/comments --json '{"author_role":"pi-agent","author_instance_key":"pi","body_md":"...","task_id":"..."}'
 ```
 
+Use the cache helper for project and task/ticket/story ID resolution:
+
+```bash
+python skills/scryer-pm/scripts/scryer_cache.py find-project "PMSystem"
+python skills/scryer-pm/scripts/scryer_cache.py ensure-project-tasks <project_id>
+python skills/scryer-pm/scripts/scryer_cache.py find-task <project_id> "ticket title"
+```
+
 Resolve relative paths from the skill directory. If this skill is installed globally, use the actual skill directory path after loading `SKILL.md`.
 
 ## What to read next
@@ -96,9 +114,10 @@ Resolve relative paths from the skill directory. If this skill is installed glob
 
 - Resolve project names/IDs: re-read `~/.pi/agent/scryer/projects.json` first each time; only fall back to `GET /api/projects` if missing or not found
 - List projects: `GET /api/projects`
-- List tasks/tickets/stories globally: `GET /api/tasks`
-- List tasks in a project: `GET /api/projects/{project_id}/tasks`
-- Get one task/ticket/story: `GET /api/tasks/{task_id}`
+- Avoid global task ID lookup; prefer per-project task JSON caches
+- Refresh a project's task ID cache: `GET /api/projects/{project_id}/tasks`, written to `~/.pi/agent/scryer/projects/<project_id>.json`
+- Resolve task/ticket/story IDs from that per-project JSON cache; refresh first if missing or older than 10 minutes; if not found, refresh once and search the JSON again
+- Get one task/ticket/story after resolving ID from JSON: `GET /api/tasks/{task_id}`
 - Valid task statuses: `unopened`, `in_planning`, `in_execution`, `ready_for_human_review`, `human_reviewed_and_closed`
 - Usual task type names: `Feature`, `Bug`, `Research`, `Debate`, `Work` (IDs are project-specific; consult `references/task-taxonomy.json`)
 - Task comments: `GET /api/tasks/{task_id}/comments`
