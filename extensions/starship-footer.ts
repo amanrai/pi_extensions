@@ -210,8 +210,8 @@ export default function (pi: ExtensionAPI) {
           }
 
           const pmStatus = pmProjectError
-            ? yellow(`Scryer offline · retry ${formatSecondsRemaining(pmNextUpdateAt)}`)
-            : green(`(tracking ${pmProjects.length} projects in Scryer) · next ${formatSecondsRemaining(pmNextUpdateAt)}`);
+            ? yellow(`(Scryer offline, retry in ${formatSecondsRemaining(pmNextUpdateAt)})`)
+            : green(`(tracking ${pmProjects.length} projects in Scryer, updates in ${formatSecondsRemaining(pmNextUpdateAt)})`);
           leftParts.push(" " + (pmUpdating ? yellow("updating Scryer…") : pmStatus));
 
           const left = leftParts.join("");
