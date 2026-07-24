@@ -1,0 +1,2677 @@
+{
+  "source": "http://100.105.192.98:43210",
+  "project_count": 40,
+  "task_statuses": [
+    "unopened",
+    "in_planning",
+    "in_execution",
+    "ready_for_human_review",
+    "human_reviewed_and_closed"
+  ],
+  "projects": [
+    {
+      "project_id": "44b80fde-b8a9-4c97-8922-e15a7bf9b15a",
+      "project_name": "PMSystem",
+      "task_types": [
+        {
+          "id": "7b3a3ad3-6d55-4d53-8d16-d05c11772152",
+          "project_id": "44b80fde-b8a9-4c97-8922-e15a7bf9b15a",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-17T02:37:53.512438",
+          "updated_at": "2026-03-17T02:37:53.512440"
+        },
+        {
+          "id": "77bcf778-be90-45e4-8dc5-7faad4680613",
+          "project_id": "44b80fde-b8a9-4c97-8922-e15a7bf9b15a",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-17T02:37:53.512441",
+          "updated_at": "2026-03-17T02:37:53.512441"
+        },
+        {
+          "id": "90cbde7d-73b9-4651-9626-41663728f00f",
+          "project_id": "44b80fde-b8a9-4c97-8922-e15a7bf9b15a",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-17T02:37:53.512442",
+          "updated_at": "2026-03-17T02:37:53.512442"
+        },
+        {
+          "id": "c8ac9da7-29ab-4df6-b1f7-cd3c7bc791de",
+          "project_id": "44b80fde-b8a9-4c97-8922-e15a7bf9b15a",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-18T01:48:26.011353",
+          "updated_at": "2026-03-18T01:48:26.011356"
+        },
+        {
+          "id": "7b9ec396-4845-4bb5-ae9b-94ea3c6deba2",
+          "project_id": "44b80fde-b8a9-4c97-8922-e15a7bf9b15a",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-21T01:25:30.659769",
+          "updated_at": "2026-03-21T01:25:30.659773"
+        }
+      ]
+    },
+    {
+      "project_id": "a399a5a2-3dbb-405a-ad33-237c7d509c68",
+      "project_name": "Tmuxer",
+      "task_types": [
+        {
+          "id": "88b4df18-fc8f-4a6c-9bfb-ae9f17c69e47",
+          "project_id": "a399a5a2-3dbb-405a-ad33-237c7d509c68",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-17T02:37:53.514825",
+          "updated_at": "2026-03-17T02:37:53.514827"
+        },
+        {
+          "id": "e82ff839-cad0-4648-9888-e3b45ca3abb4",
+          "project_id": "a399a5a2-3dbb-405a-ad33-237c7d509c68",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-17T02:37:53.514828",
+          "updated_at": "2026-03-17T02:37:53.514828"
+        },
+        {
+          "id": "ed1a90f6-fe18-47ed-a02c-9cd98f14c20c",
+          "project_id": "a399a5a2-3dbb-405a-ad33-237c7d509c68",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-17T02:37:53.514829",
+          "updated_at": "2026-03-17T02:37:53.514829"
+        },
+        {
+          "id": "b3b5797c-cd12-4b17-914e-f393afd4e7ea",
+          "project_id": "a399a5a2-3dbb-405a-ad33-237c7d509c68",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-18T01:48:26.019986",
+          "updated_at": "2026-03-18T01:48:26.019988"
+        },
+        {
+          "id": "1e02a471-153a-48bf-8775-873fb5d601cd",
+          "project_id": "a399a5a2-3dbb-405a-ad33-237c7d509c68",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-21T12:38:50.216479",
+          "updated_at": "2026-03-21T12:38:50.216484"
+        }
+      ]
+    },
+    {
+      "project_id": "e2027f56-7e15-44bf-b113-31191360c7a8",
+      "project_name": "Researcher",
+      "task_types": [
+        {
+          "id": "3f13da53-83f4-486d-b016-510837bae15a",
+          "project_id": "e2027f56-7e15-44bf-b113-31191360c7a8",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-18T00:56:07.806259",
+          "updated_at": "2026-03-18T00:56:07.806268"
+        },
+        {
+          "id": "55a86c66-6507-450e-8745-3eb485cc5d6e",
+          "project_id": "e2027f56-7e15-44bf-b113-31191360c7a8",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-18T00:56:07.806270",
+          "updated_at": "2026-03-18T00:56:07.806271"
+        },
+        {
+          "id": "cd8210b1-e894-46dc-bca7-0e51b25ba061",
+          "project_id": "e2027f56-7e15-44bf-b113-31191360c7a8",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-18T00:56:07.806272",
+          "updated_at": "2026-03-18T00:56:07.806273"
+        },
+        {
+          "id": "2931121d-5a66-4632-9cc0-ccc3fba2fd4c",
+          "project_id": "e2027f56-7e15-44bf-b113-31191360c7a8",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-18T01:48:26.036214",
+          "updated_at": "2026-03-18T01:48:26.036216"
+        },
+        {
+          "id": "1a11b4f2-1cfa-4c74-aaae-34eb9787f412",
+          "project_id": "e2027f56-7e15-44bf-b113-31191360c7a8",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-21T08:10:20.399517",
+          "updated_at": "2026-03-21T08:10:20.399521"
+        }
+      ]
+    },
+    {
+      "project_id": "0aac27af-8a04-4255-8f1b-d2700fc0dfdd",
+      "project_name": "Full functionality",
+      "task_types": [
+        {
+          "id": "2cf3638c-d2cd-48a2-bf02-a57c91d92990",
+          "project_id": "0aac27af-8a04-4255-8f1b-d2700fc0dfdd",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-21T01:19:17.878975",
+          "updated_at": "2026-03-21T01:19:17.878977"
+        },
+        {
+          "id": "587d6782-cc89-492d-8781-b7f906e1f495",
+          "project_id": "0aac27af-8a04-4255-8f1b-d2700fc0dfdd",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-21T01:19:17.878978",
+          "updated_at": "2026-03-21T01:19:17.878978"
+        },
+        {
+          "id": "eb9b46ea-c7ee-4396-8953-c36a39cf968f",
+          "project_id": "0aac27af-8a04-4255-8f1b-d2700fc0dfdd",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-21T01:19:17.878979",
+          "updated_at": "2026-03-21T01:19:17.878979"
+        },
+        {
+          "id": "30ee1d74-c4f7-4c16-bee1-6fd51f4c65ad",
+          "project_id": "0aac27af-8a04-4255-8f1b-d2700fc0dfdd",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-21T01:19:17.878980",
+          "updated_at": "2026-03-21T01:19:17.878980"
+        },
+        {
+          "id": "76171eea-7ba3-4ff0-9c07-6dfb3eb3d384",
+          "project_id": "0aac27af-8a04-4255-8f1b-d2700fc0dfdd",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-21T01:25:31.246461",
+          "updated_at": "2026-03-21T01:25:31.246475"
+        }
+      ]
+    },
+    {
+      "project_id": "576bbc64-5fee-4d27-aa68-e6977129dcc2",
+      "project_name": "Arboretum",
+      "task_types": [
+        {
+          "id": "962a8718-88d9-4b94-a2dc-76e7c1e7308b",
+          "project_id": "576bbc64-5fee-4d27-aa68-e6977129dcc2",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-27T02:54:01.496673",
+          "updated_at": "2026-03-27T02:54:01.496674"
+        },
+        {
+          "id": "0f52262f-5300-4fb7-9228-008898f20e97",
+          "project_id": "576bbc64-5fee-4d27-aa68-e6977129dcc2",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-27T02:54:01.496675",
+          "updated_at": "2026-03-27T02:54:01.496676"
+        },
+        {
+          "id": "79138d92-0cae-42aa-bf22-edc3c6342ace",
+          "project_id": "576bbc64-5fee-4d27-aa68-e6977129dcc2",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-27T02:54:01.496676",
+          "updated_at": "2026-03-27T02:54:01.496676"
+        },
+        {
+          "id": "fadc6e51-9bc0-4e12-9d52-225bb87c533c",
+          "project_id": "576bbc64-5fee-4d27-aa68-e6977129dcc2",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-27T02:54:01.496677",
+          "updated_at": "2026-03-27T02:54:01.496677"
+        },
+        {
+          "id": "ec8ca9c6-3dbb-4aec-87a9-c8c7582e57e6",
+          "project_id": "576bbc64-5fee-4d27-aa68-e6977129dcc2",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-27T02:54:01.496677",
+          "updated_at": "2026-03-27T02:54:01.496678"
+        }
+      ]
+    },
+    {
+      "project_id": "8691e5c2-ada9-4ca4-bc0f-7cc03dbdd277",
+      "project_name": "scryer",
+      "task_types": [
+        {
+          "id": "a897105d-cc2b-42b8-9f6f-89297edcadb8",
+          "project_id": "8691e5c2-ada9-4ca4-bc0f-7cc03dbdd277",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:18:38.126768",
+          "updated_at": "2026-03-29T02:18:38.126769"
+        },
+        {
+          "id": "2e27c339-af06-4d12-b2df-0ffb6cc399e9",
+          "project_id": "8691e5c2-ada9-4ca4-bc0f-7cc03dbdd277",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:18:38.126770",
+          "updated_at": "2026-03-29T02:18:38.126770"
+        },
+        {
+          "id": "fe7d3f37-68c2-4a9c-9f5b-12e2ef424f96",
+          "project_id": "8691e5c2-ada9-4ca4-bc0f-7cc03dbdd277",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:18:38.126770",
+          "updated_at": "2026-03-29T02:18:38.126771"
+        },
+        {
+          "id": "8c492743-1a9a-4883-84f9-410e826f932f",
+          "project_id": "8691e5c2-ada9-4ca4-bc0f-7cc03dbdd277",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:18:38.126771",
+          "updated_at": "2026-03-29T02:18:38.126771"
+        },
+        {
+          "id": "d8bf8d39-0aeb-4d69-a582-126c42001ac8",
+          "project_id": "8691e5c2-ada9-4ca4-bc0f-7cc03dbdd277",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:18:38.126771",
+          "updated_at": "2026-03-29T02:18:38.126771"
+        }
+      ]
+    },
+    {
+      "project_id": "5c9ed333-d5e8-458a-a44a-658df02412dc",
+      "project_name": "Secrets Layer",
+      "task_types": [
+        {
+          "id": "f1736c0f-493f-43b2-bf7c-3d9c2ce9dbcd",
+          "project_id": "5c9ed333-d5e8-458a-a44a-658df02412dc",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:02.266092",
+          "updated_at": "2026-03-29T02:19:02.266094"
+        },
+        {
+          "id": "e82eac79-1b08-4af6-abfc-435562896d01",
+          "project_id": "5c9ed333-d5e8-458a-a44a-658df02412dc",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:02.266095",
+          "updated_at": "2026-03-29T02:19:02.266096"
+        },
+        {
+          "id": "cf68df7d-d968-4941-b53d-4480e2306715",
+          "project_id": "5c9ed333-d5e8-458a-a44a-658df02412dc",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:02.266097",
+          "updated_at": "2026-03-29T02:19:02.266097"
+        },
+        {
+          "id": "7a3499aa-7505-4d06-85bc-c5476b5387b3",
+          "project_id": "5c9ed333-d5e8-458a-a44a-658df02412dc",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:02.266098",
+          "updated_at": "2026-03-29T02:19:02.266098"
+        },
+        {
+          "id": "f4ce8ef2-6235-4a24-92bf-b1234dfba825",
+          "project_id": "5c9ed333-d5e8-458a-a44a-658df02412dc",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:02.266099",
+          "updated_at": "2026-03-29T02:19:02.266100"
+        }
+      ]
+    },
+    {
+      "project_id": "1e3e6f13-e917-41d9-97a1-abb25bb8a1cf",
+      "project_name": "Orchestration Layer",
+      "task_types": [
+        {
+          "id": "b5373d95-f637-400d-8a32-54b6e2fdd4ad",
+          "project_id": "1e3e6f13-e917-41d9-97a1-abb25bb8a1cf",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:11.656087",
+          "updated_at": "2026-03-29T02:19:11.656088"
+        },
+        {
+          "id": "3f5eef42-5db1-48f6-aa84-653e3fc221c5",
+          "project_id": "1e3e6f13-e917-41d9-97a1-abb25bb8a1cf",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:11.656088",
+          "updated_at": "2026-03-29T02:19:11.656089"
+        },
+        {
+          "id": "cca0c090-7563-4de6-9b7a-795e632fd3e4",
+          "project_id": "1e3e6f13-e917-41d9-97a1-abb25bb8a1cf",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:11.656089",
+          "updated_at": "2026-03-29T02:19:11.656089"
+        },
+        {
+          "id": "d2e7f23f-5938-4a87-8555-7167fee3809f",
+          "project_id": "1e3e6f13-e917-41d9-97a1-abb25bb8a1cf",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:11.656090",
+          "updated_at": "2026-03-29T02:19:11.656090"
+        },
+        {
+          "id": "6099b0fd-41ae-4459-83de-5e08c53c7ec8",
+          "project_id": "1e3e6f13-e917-41d9-97a1-abb25bb8a1cf",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:11.656090",
+          "updated_at": "2026-03-29T02:19:11.656090"
+        }
+      ]
+    },
+    {
+      "project_id": "f3573919-e567-47e6-95d9-5810fb61854b",
+      "project_name": "Git Integration Layer",
+      "task_types": [
+        {
+          "id": "d6ed4d05-f750-40e7-b888-3430019eba63",
+          "project_id": "f3573919-e567-47e6-95d9-5810fb61854b",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:20.450256",
+          "updated_at": "2026-03-29T02:19:20.450256"
+        },
+        {
+          "id": "790d0b8b-7391-437a-87dc-a2f8c89d20fb",
+          "project_id": "f3573919-e567-47e6-95d9-5810fb61854b",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:20.450257",
+          "updated_at": "2026-03-29T02:19:20.450257"
+        },
+        {
+          "id": "24b9a958-ae1c-4407-86e4-682efba15ad5",
+          "project_id": "f3573919-e567-47e6-95d9-5810fb61854b",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:20.450258",
+          "updated_at": "2026-03-29T02:19:20.450259"
+        },
+        {
+          "id": "972a78a1-8b56-44b3-b0ea-6cf9c9d7b363",
+          "project_id": "f3573919-e567-47e6-95d9-5810fb61854b",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:20.450258",
+          "updated_at": "2026-03-29T02:19:20.450258"
+        },
+        {
+          "id": "b3a08cbd-66e6-4b85-beb6-0635c28c7aa0",
+          "project_id": "f3573919-e567-47e6-95d9-5810fb61854b",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:19:20.450259",
+          "updated_at": "2026-03-29T02:19:20.450259"
+        }
+      ]
+    },
+    {
+      "project_id": "c0d4af9f-8cc1-43bb-b678-eb6bb02da8d6",
+      "project_name": "PM System UI",
+      "task_types": [
+        {
+          "id": "fa73c27e-9e74-4634-a081-12b0d4568f34",
+          "project_id": "c0d4af9f-8cc1-43bb-b678-eb6bb02da8d6",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:23:38.429333",
+          "updated_at": "2026-03-29T02:23:38.429334"
+        },
+        {
+          "id": "597a5c2b-0935-4a0a-8f23-92b7b1c23f32",
+          "project_id": "c0d4af9f-8cc1-43bb-b678-eb6bb02da8d6",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:23:38.429335",
+          "updated_at": "2026-03-29T02:23:38.429335"
+        },
+        {
+          "id": "9f95d9b3-981d-4729-bb09-01df35117e09",
+          "project_id": "c0d4af9f-8cc1-43bb-b678-eb6bb02da8d6",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:23:38.429335",
+          "updated_at": "2026-03-29T02:23:38.429335"
+        },
+        {
+          "id": "97f59441-9f99-4f60-bc4f-8f6a674dc7f7",
+          "project_id": "c0d4af9f-8cc1-43bb-b678-eb6bb02da8d6",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:23:38.429336",
+          "updated_at": "2026-03-29T02:23:38.429336"
+        },
+        {
+          "id": "c488f912-8314-4f44-ab2a-db893428ea30",
+          "project_id": "c0d4af9f-8cc1-43bb-b678-eb6bb02da8d6",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-03-29T02:23:38.429336",
+          "updated_at": "2026-03-29T02:23:38.429337"
+        }
+      ]
+    },
+    {
+      "project_id": "f3ba3204-c705-4cc6-8038-5fd3ff503b38",
+      "project_name": "Small Diffusion Model",
+      "task_types": [
+        {
+          "id": "c918ebe1-5164-4f6a-a552-1db15e0916a1",
+          "project_id": "f3ba3204-c705-4cc6-8038-5fd3ff503b38",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-04-01T02:02:00.222046",
+          "updated_at": "2026-04-01T02:02:00.222046"
+        },
+        {
+          "id": "b0c1c82d-7326-42e4-962e-22c834d76c8f",
+          "project_id": "f3ba3204-c705-4cc6-8038-5fd3ff503b38",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-01T02:02:00.222047",
+          "updated_at": "2026-04-01T02:02:00.222047"
+        },
+        {
+          "id": "c3d1782e-f74d-4388-93a7-5abe76b51f73",
+          "project_id": "f3ba3204-c705-4cc6-8038-5fd3ff503b38",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-01T02:02:00.222047",
+          "updated_at": "2026-04-01T02:02:00.222048"
+        },
+        {
+          "id": "a76989f5-c2df-41f8-ae8f-2e5a49672542",
+          "project_id": "f3ba3204-c705-4cc6-8038-5fd3ff503b38",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-01T02:02:00.222048",
+          "updated_at": "2026-04-01T02:02:00.222048"
+        },
+        {
+          "id": "17491144-6f27-400d-9897-5db3433eb18b",
+          "project_id": "f3ba3204-c705-4cc6-8038-5fd3ff503b38",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-01T02:02:00.222048",
+          "updated_at": "2026-04-01T02:02:00.222049"
+        }
+      ]
+    },
+    {
+      "project_id": "35281181-cd7f-46bf-a4a9-7d9e6429d354",
+      "project_name": "~LoomTesting",
+      "task_types": [
+        {
+          "id": "2c6ea604-ebab-43be-bd81-79560493aae9",
+          "project_id": "35281181-cd7f-46bf-a4a9-7d9e6429d354",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-04-02T17:46:05.502353",
+          "updated_at": "2026-04-02T17:46:05.502354"
+        },
+        {
+          "id": "07480d8f-b3ac-4cbc-9dda-740b102c71e1",
+          "project_id": "35281181-cd7f-46bf-a4a9-7d9e6429d354",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-02T17:46:05.502354",
+          "updated_at": "2026-04-02T17:46:05.502354"
+        },
+        {
+          "id": "110ccd04-1ebc-42a1-89e8-f5b066570fe5",
+          "project_id": "35281181-cd7f-46bf-a4a9-7d9e6429d354",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-02T17:46:05.502355",
+          "updated_at": "2026-04-02T17:46:05.502356"
+        },
+        {
+          "id": "fa1b7f05-bb42-40eb-ab4f-4108b49d1198",
+          "project_id": "35281181-cd7f-46bf-a4a9-7d9e6429d354",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-02T17:46:05.502355",
+          "updated_at": "2026-04-02T17:46:05.502355"
+        },
+        {
+          "id": "4bcc7bfb-20ef-41ba-92c4-b503f1f2ced0",
+          "project_id": "35281181-cd7f-46bf-a4a9-7d9e6429d354",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-02T17:46:05.502356",
+          "updated_at": "2026-04-02T17:46:05.502356"
+        },
+        {
+          "id": "5b14567e-45c9-40f6-a3a9-35579e6721f8",
+          "project_id": "35281181-cd7f-46bf-a4a9-7d9e6429d354",
+          "key": "task",
+          "name": "Task",
+          "color": "#6366f1",
+          "icon": "check-square",
+          "behavior_json": "{\"allow_child_tasks\": false, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-04-02T17:46:38.024424",
+          "updated_at": "2026-04-02T17:46:38.024427"
+        }
+      ]
+    },
+    {
+      "project_id": "5d0b860a-4167-4691-8868-45a331a8311b",
+      "project_name": "Loom",
+      "task_types": [
+        {
+          "id": "d832529e-998b-406c-8bec-07292e40d462",
+          "project_id": "5d0b860a-4167-4691-8868-45a331a8311b",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-04-08T12:11:13.111445",
+          "updated_at": "2026-04-08T12:11:13.111446"
+        },
+        {
+          "id": "cfe120f8-f5e5-4430-b844-9989cecc7d1a",
+          "project_id": "5d0b860a-4167-4691-8868-45a331a8311b",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-08T12:11:13.111447",
+          "updated_at": "2026-04-08T12:11:13.111448"
+        },
+        {
+          "id": "f82ae2e9-783a-4821-8e5a-12c462363f61",
+          "project_id": "5d0b860a-4167-4691-8868-45a331a8311b",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-08T12:11:13.111448",
+          "updated_at": "2026-04-08T12:11:13.111448"
+        },
+        {
+          "id": "b6d1d2a4-7fec-4e6e-bd32-c8574d684488",
+          "project_id": "5d0b860a-4167-4691-8868-45a331a8311b",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-08T12:11:13.111449",
+          "updated_at": "2026-04-08T12:11:13.111449"
+        },
+        {
+          "id": "9663b574-41ab-4371-b0f7-e3a443312527",
+          "project_id": "5d0b860a-4167-4691-8868-45a331a8311b",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-08T12:11:13.111450",
+          "updated_at": "2026-04-08T12:11:13.111450"
+        }
+      ]
+    },
+    {
+      "project_id": "9960ed56-3f55-4be7-89b3-aeb5e18d658d",
+      "project_name": "Zoe",
+      "task_types": [
+        {
+          "id": "23cd24d1-bbce-4c83-bc90-26dcfc15cdb4",
+          "project_id": "9960ed56-3f55-4be7-89b3-aeb5e18d658d",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-04-12T12:34:21.089137",
+          "updated_at": "2026-04-12T12:34:21.089143"
+        },
+        {
+          "id": "a424e944-b64a-4db3-9eac-76d31558f679",
+          "project_id": "9960ed56-3f55-4be7-89b3-aeb5e18d658d",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-12T12:34:21.089144",
+          "updated_at": "2026-04-12T12:34:21.089145"
+        },
+        {
+          "id": "3117671f-186d-45cb-9be4-49f4cb584673",
+          "project_id": "9960ed56-3f55-4be7-89b3-aeb5e18d658d",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-12T12:34:21.089146",
+          "updated_at": "2026-04-12T12:34:21.089146"
+        },
+        {
+          "id": "e33b6c0d-d969-46f3-ba84-773c55d27fa2",
+          "project_id": "9960ed56-3f55-4be7-89b3-aeb5e18d658d",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-12T12:34:21.089147",
+          "updated_at": "2026-04-12T12:34:21.089148"
+        },
+        {
+          "id": "7c413f6e-4506-42fe-a8fb-b046221dc101",
+          "project_id": "9960ed56-3f55-4be7-89b3-aeb5e18d658d",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-12T12:34:21.089149",
+          "updated_at": "2026-04-12T12:34:21.089149"
+        }
+      ]
+    },
+    {
+      "project_id": "f5ee86f9-2542-4732-af94-717cbea280f0",
+      "project_name": "ZAR",
+      "task_types": [
+        {
+          "id": "dd5b3c50-62a3-4808-a152-f23ead6e008f",
+          "project_id": "f5ee86f9-2542-4732-af94-717cbea280f0",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-04-16T03:31:56.667581",
+          "updated_at": "2026-04-16T03:31:56.667583"
+        },
+        {
+          "id": "6799fe08-3a5a-457e-8a2f-214472b707c8",
+          "project_id": "f5ee86f9-2542-4732-af94-717cbea280f0",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-16T03:31:56.667585",
+          "updated_at": "2026-04-16T03:31:56.667586"
+        },
+        {
+          "id": "9c093ce4-a213-4a79-83e9-b8ffc3fd6743",
+          "project_id": "f5ee86f9-2542-4732-af94-717cbea280f0",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-16T03:31:56.667587",
+          "updated_at": "2026-04-16T03:31:56.667587"
+        },
+        {
+          "id": "65545443-6161-42ec-b097-e921f87572a5",
+          "project_id": "f5ee86f9-2542-4732-af94-717cbea280f0",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-16T03:31:56.667588",
+          "updated_at": "2026-04-16T03:31:56.667589"
+        },
+        {
+          "id": "d9366261-9944-42c6-84fd-c21147f689cb",
+          "project_id": "f5ee86f9-2542-4732-af94-717cbea280f0",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-16T03:31:56.667590",
+          "updated_at": "2026-04-16T03:31:56.667590"
+        }
+      ]
+    },
+    {
+      "project_id": "6b49084c-51a7-426f-911e-307cbe044f05",
+      "project_name": "Zoe Onboarding",
+      "task_types": [
+        {
+          "id": "64a7b82b-070a-41b2-af97-8f06de74f5d3",
+          "project_id": "6b49084c-51a7-426f-911e-307cbe044f05",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-04-22T02:18:10.697749",
+          "updated_at": "2026-04-22T02:18:10.697750"
+        },
+        {
+          "id": "164810ad-0311-4ce0-a550-4f87a293e67d",
+          "project_id": "6b49084c-51a7-426f-911e-307cbe044f05",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-22T02:18:10.697751",
+          "updated_at": "2026-04-22T02:18:10.697751"
+        },
+        {
+          "id": "e5ca7e6c-0afb-43ec-b473-217158915b23",
+          "project_id": "6b49084c-51a7-426f-911e-307cbe044f05",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-22T02:18:10.697752",
+          "updated_at": "2026-04-22T02:18:10.697752"
+        },
+        {
+          "id": "0f2ee158-5852-4daa-a820-fe11520fadde",
+          "project_id": "6b49084c-51a7-426f-911e-307cbe044f05",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-22T02:18:10.697753",
+          "updated_at": "2026-04-22T02:18:10.697753"
+        },
+        {
+          "id": "9cc755a0-a957-4fb5-9693-a8f461d0905e",
+          "project_id": "6b49084c-51a7-426f-911e-307cbe044f05",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-22T02:18:10.697754",
+          "updated_at": "2026-04-22T02:18:10.697754"
+        }
+      ]
+    },
+    {
+      "project_id": "acea7b5c-fb2a-408f-9aae-03b3221eb9ea",
+      "project_name": "Zoe Data Plane",
+      "task_types": [
+        {
+          "id": "2dadfd67-3c24-42d9-8cd5-95c2ffff37c3",
+          "project_id": "acea7b5c-fb2a-408f-9aae-03b3221eb9ea",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-04-26T02:28:05.017467",
+          "updated_at": "2026-04-26T02:28:05.017469"
+        },
+        {
+          "id": "25532cf0-0e74-4626-8e50-10bf0066ecd6",
+          "project_id": "acea7b5c-fb2a-408f-9aae-03b3221eb9ea",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-26T02:28:05.017470",
+          "updated_at": "2026-04-26T02:28:05.017470"
+        },
+        {
+          "id": "226de588-0117-4287-9c35-859e326182a7",
+          "project_id": "acea7b5c-fb2a-408f-9aae-03b3221eb9ea",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-26T02:28:05.017471",
+          "updated_at": "2026-04-26T02:28:05.017472"
+        },
+        {
+          "id": "5512d1f8-bc35-4ee5-888f-6c48167109e4",
+          "project_id": "acea7b5c-fb2a-408f-9aae-03b3221eb9ea",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-26T02:28:05.017472",
+          "updated_at": "2026-04-26T02:28:05.017473"
+        },
+        {
+          "id": "d32eb341-02e2-432e-abec-29e8d43597ff",
+          "project_id": "acea7b5c-fb2a-408f-9aae-03b3221eb9ea",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-26T02:28:05.017473",
+          "updated_at": "2026-04-26T02:28:05.017474"
+        }
+      ]
+    },
+    {
+      "project_id": "746f7f70-a17c-4df1-bfd3-fdc796479dc3",
+      "project_name": "zAdmin",
+      "task_types": [
+        {
+          "id": "21ab1046-0dcd-46f7-ac57-dda1a03aa7e8",
+          "project_id": "746f7f70-a17c-4df1-bfd3-fdc796479dc3",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-04-29T00:58:19.569916",
+          "updated_at": "2026-04-29T00:58:19.569917"
+        },
+        {
+          "id": "42753e44-d65a-41a6-b7e2-4b23dea029c2",
+          "project_id": "746f7f70-a17c-4df1-bfd3-fdc796479dc3",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-29T00:58:19.569918",
+          "updated_at": "2026-04-29T00:58:19.569918"
+        },
+        {
+          "id": "5aca38b6-1329-4e6c-8314-02d5e8857974",
+          "project_id": "746f7f70-a17c-4df1-bfd3-fdc796479dc3",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-29T00:58:19.569918",
+          "updated_at": "2026-04-29T00:58:19.569919"
+        },
+        {
+          "id": "69e6ece9-7d36-4286-8018-fc117fc6cbe8",
+          "project_id": "746f7f70-a17c-4df1-bfd3-fdc796479dc3",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-29T00:58:19.569919",
+          "updated_at": "2026-04-29T00:58:19.569919"
+        },
+        {
+          "id": "62917316-84ad-449b-bd38-49d38232625a",
+          "project_id": "746f7f70-a17c-4df1-bfd3-fdc796479dc3",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-04-29T00:58:19.569920",
+          "updated_at": "2026-04-29T00:58:19.569920"
+        }
+      ]
+    },
+    {
+      "project_id": "fbc72e8b-b4f0-43e2-9465-582587d8dcbc",
+      "project_name": "Dorje",
+      "task_types": [
+        {
+          "id": "c993a41f-39c5-4bfc-8ad1-47c1ae3840f3",
+          "project_id": "fbc72e8b-b4f0-43e2-9465-582587d8dcbc",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-05-09T01:40:32.129469",
+          "updated_at": "2026-05-09T01:40:32.129470"
+        },
+        {
+          "id": "ebb82ab4-31e7-42dd-9702-e6b95fb6d48f",
+          "project_id": "fbc72e8b-b4f0-43e2-9465-582587d8dcbc",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-09T01:40:32.129470",
+          "updated_at": "2026-05-09T01:40:32.129471"
+        },
+        {
+          "id": "650a8552-32d9-45b0-92d3-c705ca4cc503",
+          "project_id": "fbc72e8b-b4f0-43e2-9465-582587d8dcbc",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-09T01:40:32.129471",
+          "updated_at": "2026-05-09T01:40:32.129472"
+        },
+        {
+          "id": "7d9d924a-449c-4194-bf5e-cd52939ded1b",
+          "project_id": "fbc72e8b-b4f0-43e2-9465-582587d8dcbc",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-09T01:40:32.129471",
+          "updated_at": "2026-05-09T01:40:32.129471"
+        },
+        {
+          "id": "f6c522be-f6a8-475d-94cf-752e5686215c",
+          "project_id": "fbc72e8b-b4f0-43e2-9465-582587d8dcbc",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-09T01:40:32.129472",
+          "updated_at": "2026-05-09T01:40:32.129472"
+        }
+      ]
+    },
+    {
+      "project_id": "30950adc-38cb-45e8-aedf-0cd115cc7019",
+      "project_name": "Morning",
+      "task_types": [
+        {
+          "id": "5c57f6f0-b03d-4fad-9f9b-daab5691a2b3",
+          "project_id": "30950adc-38cb-45e8-aedf-0cd115cc7019",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.074890",
+          "updated_at": "2026-05-17T05:18:07.074891"
+        },
+        {
+          "id": "5ab60e20-2daa-4bc6-a085-21eed4228a07",
+          "project_id": "30950adc-38cb-45e8-aedf-0cd115cc7019",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.074891",
+          "updated_at": "2026-05-17T05:18:07.074892"
+        },
+        {
+          "id": "2ddf656d-db18-4f27-9d17-a3150e6690c8",
+          "project_id": "30950adc-38cb-45e8-aedf-0cd115cc7019",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.074892",
+          "updated_at": "2026-05-17T05:18:07.074892"
+        },
+        {
+          "id": "fa1ec73a-3e62-4671-87a1-c37a8ed1cd2c",
+          "project_id": "30950adc-38cb-45e8-aedf-0cd115cc7019",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.074893",
+          "updated_at": "2026-05-17T05:18:07.074893"
+        },
+        {
+          "id": "33749399-81fc-4d03-9b0b-11d5204e8d9e",
+          "project_id": "30950adc-38cb-45e8-aedf-0cd115cc7019",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.074893",
+          "updated_at": "2026-05-17T05:18:07.074894"
+        }
+      ]
+    },
+    {
+      "project_id": "d6a0bf7c-7c5d-461a-bd44-38f93e921e8c",
+      "project_name": "Morning UI",
+      "task_types": [
+        {
+          "id": "ccce0e54-c86a-4d2d-a103-3b5bbe17f537",
+          "project_id": "d6a0bf7c-7c5d-461a-bd44-38f93e921e8c",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.102871",
+          "updated_at": "2026-05-17T05:18:07.102871"
+        },
+        {
+          "id": "eef73213-6d7e-4278-92c6-ecfa9c5ff96c",
+          "project_id": "d6a0bf7c-7c5d-461a-bd44-38f93e921e8c",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.102872",
+          "updated_at": "2026-05-17T05:18:07.102872"
+        },
+        {
+          "id": "41811004-2f9f-4fee-8576-35d0a4b867fd",
+          "project_id": "d6a0bf7c-7c5d-461a-bd44-38f93e921e8c",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.102873",
+          "updated_at": "2026-05-17T05:18:07.102873"
+        },
+        {
+          "id": "366b2675-38be-4426-abd5-37d1e393d323",
+          "project_id": "d6a0bf7c-7c5d-461a-bd44-38f93e921e8c",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.102873",
+          "updated_at": "2026-05-17T05:18:07.102873"
+        },
+        {
+          "id": "f7946c2f-0183-4420-9de6-572e7092aea6",
+          "project_id": "d6a0bf7c-7c5d-461a-bd44-38f93e921e8c",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.102874",
+          "updated_at": "2026-05-17T05:18:07.102874"
+        }
+      ]
+    },
+    {
+      "project_id": "b257b426-1089-4862-8611-a510009c4615",
+      "project_name": "Morning API",
+      "task_types": [
+        {
+          "id": "8d60227a-5b5a-418f-a69f-d03341817ccd",
+          "project_id": "b257b426-1089-4862-8611-a510009c4615",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.123153",
+          "updated_at": "2026-05-17T05:18:07.123154"
+        },
+        {
+          "id": "f29d1fea-c7d6-4d77-8a0f-4e8d8e95aaf8",
+          "project_id": "b257b426-1089-4862-8611-a510009c4615",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.123154",
+          "updated_at": "2026-05-17T05:18:07.123154"
+        },
+        {
+          "id": "69d0d52c-7ea5-447f-99ee-c57c952e7387",
+          "project_id": "b257b426-1089-4862-8611-a510009c4615",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.123155",
+          "updated_at": "2026-05-17T05:18:07.123156"
+        },
+        {
+          "id": "a5d1d8ac-a4e0-4018-ae85-7f54e66de58a",
+          "project_id": "b257b426-1089-4862-8611-a510009c4615",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.123155",
+          "updated_at": "2026-05-17T05:18:07.123155"
+        },
+        {
+          "id": "efc8a712-d7e7-4282-8aec-38c0543f3991",
+          "project_id": "b257b426-1089-4862-8611-a510009c4615",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.123156",
+          "updated_at": "2026-05-17T05:18:07.123156"
+        }
+      ]
+    },
+    {
+      "project_id": "ffd01592-98f8-4a4e-8125-da9b6a101a88",
+      "project_name": "Morning Fetchers",
+      "task_types": [
+        {
+          "id": "9aafc48c-d9ea-4e90-9b3b-0dab0888af48",
+          "project_id": "ffd01592-98f8-4a4e-8125-da9b6a101a88",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.142160",
+          "updated_at": "2026-05-17T05:18:07.142160"
+        },
+        {
+          "id": "a1faa9a3-2b38-4f36-9289-9db6148d341b",
+          "project_id": "ffd01592-98f8-4a4e-8125-da9b6a101a88",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.142161",
+          "updated_at": "2026-05-17T05:18:07.142161"
+        },
+        {
+          "id": "6c887853-f052-4316-8bb0-d383c337ddc0",
+          "project_id": "ffd01592-98f8-4a4e-8125-da9b6a101a88",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.142161",
+          "updated_at": "2026-05-17T05:18:07.142162"
+        },
+        {
+          "id": "abc03420-85b5-4e10-85cb-ce56651d65ba",
+          "project_id": "ffd01592-98f8-4a4e-8125-da9b6a101a88",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.142162",
+          "updated_at": "2026-05-17T05:18:07.142162"
+        },
+        {
+          "id": "f7288221-0c2a-4068-995d-86eb177952dc",
+          "project_id": "ffd01592-98f8-4a4e-8125-da9b6a101a88",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.142162",
+          "updated_at": "2026-05-17T05:18:07.142163"
+        }
+      ]
+    },
+    {
+      "project_id": "651466ff-bd76-44a5-9f55-d2024c30bee3",
+      "project_name": "Morning Agents",
+      "task_types": [
+        {
+          "id": "2d7ac2e5-ce0f-4f10-8460-219741f4f739",
+          "project_id": "651466ff-bd76-44a5-9f55-d2024c30bee3",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.161502",
+          "updated_at": "2026-05-17T05:18:07.161503"
+        },
+        {
+          "id": "6119cec7-a998-4eaa-a7c8-192d34cb2ba1",
+          "project_id": "651466ff-bd76-44a5-9f55-d2024c30bee3",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.161503",
+          "updated_at": "2026-05-17T05:18:07.161504"
+        },
+        {
+          "id": "199ae024-ea57-4843-a4a0-c00e90d41d57",
+          "project_id": "651466ff-bd76-44a5-9f55-d2024c30bee3",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.161504",
+          "updated_at": "2026-05-17T05:18:07.161505"
+        },
+        {
+          "id": "72672470-4188-4203-9988-a1991e2eb778",
+          "project_id": "651466ff-bd76-44a5-9f55-d2024c30bee3",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.161504",
+          "updated_at": "2026-05-17T05:18:07.161504"
+        },
+        {
+          "id": "9e94785a-1f2a-4a4f-87a0-e2c4f6a01d32",
+          "project_id": "651466ff-bd76-44a5-9f55-d2024c30bee3",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-17T05:18:07.161505",
+          "updated_at": "2026-05-17T05:18:07.161505"
+        }
+      ]
+    },
+    {
+      "project_id": "38db52f1-ff67-416d-94a7-9904f25e2e4b",
+      "project_name": "Morning Memory",
+      "task_types": [
+        {
+          "id": "05031a40-de70-4424-8705-6bdc5f20f9c2",
+          "project_id": "38db52f1-ff67-416d-94a7-9904f25e2e4b",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-05-22T02:30:47.456808",
+          "updated_at": "2026-05-22T02:30:47.456809"
+        },
+        {
+          "id": "9c313ae6-9ab9-487f-9bb0-d9fb05e807ee",
+          "project_id": "38db52f1-ff67-416d-94a7-9904f25e2e4b",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-22T02:30:47.456810",
+          "updated_at": "2026-05-22T02:30:47.456810"
+        },
+        {
+          "id": "bc60f317-a8da-4d48-adf9-e4330a657086",
+          "project_id": "38db52f1-ff67-416d-94a7-9904f25e2e4b",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-22T02:30:47.456810",
+          "updated_at": "2026-05-22T02:30:47.456811"
+        },
+        {
+          "id": "6320bbcc-a416-4179-a837-f9264f066b0f",
+          "project_id": "38db52f1-ff67-416d-94a7-9904f25e2e4b",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-22T02:30:47.456811",
+          "updated_at": "2026-05-22T02:30:47.456811"
+        },
+        {
+          "id": "9c99b6c6-977c-4186-9ed8-77c8041a758c",
+          "project_id": "38db52f1-ff67-416d-94a7-9904f25e2e4b",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-05-22T02:30:47.456811",
+          "updated_at": "2026-05-22T02:30:47.456812"
+        }
+      ]
+    },
+    {
+      "project_id": "c4eaaad3-e44e-453d-8f74-6b92c3751352",
+      "project_name": "Dailies",
+      "task_types": [
+        {
+          "id": "85460d47-0f3d-4bbd-a2a1-808c2d9b5950",
+          "project_id": "c4eaaad3-e44e-453d-8f74-6b92c3751352",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-11T05:28:43.979634",
+          "updated_at": "2026-06-11T05:28:43.979636"
+        },
+        {
+          "id": "f54e7bb7-830b-4fd4-90e6-1687ec287267",
+          "project_id": "c4eaaad3-e44e-453d-8f74-6b92c3751352",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-11T05:28:43.979637",
+          "updated_at": "2026-06-11T05:28:43.979638"
+        },
+        {
+          "id": "5fae5d9e-49fc-4d3e-abb3-445109863285",
+          "project_id": "c4eaaad3-e44e-453d-8f74-6b92c3751352",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-11T05:28:43.979639",
+          "updated_at": "2026-06-11T05:28:43.979640"
+        },
+        {
+          "id": "bab69368-094d-4556-8a1f-99603442eecb",
+          "project_id": "c4eaaad3-e44e-453d-8f74-6b92c3751352",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-11T05:28:43.979641",
+          "updated_at": "2026-06-11T05:28:43.979641"
+        },
+        {
+          "id": "6daecc2d-5c0d-4efc-90fd-afd45f5bea9b",
+          "project_id": "c4eaaad3-e44e-453d-8f74-6b92c3751352",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-11T05:28:43.979642",
+          "updated_at": "2026-06-11T05:28:43.979643"
+        }
+      ]
+    },
+    {
+      "project_id": "3455dd39-7591-40ad-b914-eec8cdcfe270",
+      "project_name": "zAnon",
+      "task_types": [
+        {
+          "id": "782b8b36-bb32-47f7-8e9c-e46af9ec2b33",
+          "project_id": "3455dd39-7591-40ad-b914-eec8cdcfe270",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-12T02:50:16.443743",
+          "updated_at": "2026-06-12T02:50:16.443746"
+        },
+        {
+          "id": "d483b43b-42e3-4a24-96dd-b0681fa7eab8",
+          "project_id": "3455dd39-7591-40ad-b914-eec8cdcfe270",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-12T02:50:16.443748",
+          "updated_at": "2026-06-12T02:50:16.443749"
+        },
+        {
+          "id": "b15f137a-fe3d-4bb1-a87d-2fcfe1f2359f",
+          "project_id": "3455dd39-7591-40ad-b914-eec8cdcfe270",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-12T02:50:16.443750",
+          "updated_at": "2026-06-12T02:50:16.443751"
+        },
+        {
+          "id": "8020c74a-ffa3-4f93-908f-5e0339b19146",
+          "project_id": "3455dd39-7591-40ad-b914-eec8cdcfe270",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-12T02:50:16.443753",
+          "updated_at": "2026-06-12T02:50:16.443754"
+        },
+        {
+          "id": "4b604be4-521f-4fe7-8775-f5ce9907b663",
+          "project_id": "3455dd39-7591-40ad-b914-eec8cdcfe270",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-12T02:50:16.443755",
+          "updated_at": "2026-06-12T02:50:16.443756"
+        }
+      ]
+    },
+    {
+      "project_id": "b2aa5161-9cba-41eb-a651-356a96ea0541",
+      "project_name": "zCS (the Zoe Legal Agent)",
+      "task_types": [
+        {
+          "id": "589da042-a8aa-42d4-ab60-ea848502d62c",
+          "project_id": "b2aa5161-9cba-41eb-a651-356a96ea0541",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-12T03:08:30.541753",
+          "updated_at": "2026-06-12T03:08:30.541756"
+        },
+        {
+          "id": "c23c7e5b-fdc4-4de5-b672-ab500d0c80ed",
+          "project_id": "b2aa5161-9cba-41eb-a651-356a96ea0541",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-12T03:08:30.541759",
+          "updated_at": "2026-06-12T03:08:30.541760"
+        },
+        {
+          "id": "9e0c59a9-29f9-4951-9709-95312a52bc6a",
+          "project_id": "b2aa5161-9cba-41eb-a651-356a96ea0541",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-12T03:08:30.541763",
+          "updated_at": "2026-06-12T03:08:30.541764"
+        },
+        {
+          "id": "7392e5b3-ad4c-4c44-8951-2278e39b82ed",
+          "project_id": "b2aa5161-9cba-41eb-a651-356a96ea0541",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-12T03:08:30.541766",
+          "updated_at": "2026-06-12T03:08:30.541767"
+        },
+        {
+          "id": "2b99b991-e077-442b-997d-144d15946f09",
+          "project_id": "b2aa5161-9cba-41eb-a651-356a96ea0541",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-12T03:08:30.541769",
+          "updated_at": "2026-06-12T03:08:30.541771"
+        }
+      ]
+    },
+    {
+      "project_id": "c3d7fe9f-2a4b-46e9-9680-9a02c885ec5d",
+      "project_name": "Sextant",
+      "task_types": [
+        {
+          "id": "137c82ff-7c7d-427e-bc30-cd9560c79e55",
+          "project_id": "c3d7fe9f-2a4b-46e9-9680-9a02c885ec5d",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:38:47.733486",
+          "updated_at": "2026-06-13T01:38:47.733487"
+        },
+        {
+          "id": "d50d5203-bac9-4d05-9bde-ecd834c5a60a",
+          "project_id": "c3d7fe9f-2a4b-46e9-9680-9a02c885ec5d",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:38:47.733488",
+          "updated_at": "2026-06-13T01:38:47.733488"
+        },
+        {
+          "id": "066dc7a5-0ec1-4a22-a5f7-ab5b754468cb",
+          "project_id": "c3d7fe9f-2a4b-46e9-9680-9a02c885ec5d",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:38:47.733488",
+          "updated_at": "2026-06-13T01:38:47.733489"
+        },
+        {
+          "id": "5c4199fa-ddfc-4510-9d0e-668580e8e265",
+          "project_id": "c3d7fe9f-2a4b-46e9-9680-9a02c885ec5d",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:38:47.733489",
+          "updated_at": "2026-06-13T01:38:47.733489"
+        },
+        {
+          "id": "cbeb7e0c-3dc3-4910-b47b-b3c4b83c4215",
+          "project_id": "c3d7fe9f-2a4b-46e9-9680-9a02c885ec5d",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:38:47.733490",
+          "updated_at": "2026-06-13T01:38:47.733490"
+        }
+      ]
+    },
+    {
+      "project_id": "90f31b77-82d1-49b0-b50c-5b8b08a98e77",
+      "project_name": "Agent",
+      "task_types": [
+        {
+          "id": "bc9706f6-e4b3-440e-9c23-04b75d289f68",
+          "project_id": "90f31b77-82d1-49b0-b50c-5b8b08a98e77",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.506479",
+          "updated_at": "2026-06-13T01:43:00.506482"
+        },
+        {
+          "id": "15718af2-2ff6-4b22-abe4-e3daf621569a",
+          "project_id": "90f31b77-82d1-49b0-b50c-5b8b08a98e77",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.506484",
+          "updated_at": "2026-06-13T01:43:00.506486"
+        },
+        {
+          "id": "16cf3997-51b3-47b7-b6b1-0866a42c3911",
+          "project_id": "90f31b77-82d1-49b0-b50c-5b8b08a98e77",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.506488",
+          "updated_at": "2026-06-13T01:43:00.506490"
+        },
+        {
+          "id": "4723e81b-ab9c-4e67-a700-5a875e2941c4",
+          "project_id": "90f31b77-82d1-49b0-b50c-5b8b08a98e77",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.506492",
+          "updated_at": "2026-06-13T01:43:00.506493"
+        },
+        {
+          "id": "251891ea-c995-4a38-aed7-a0e11d181ea0",
+          "project_id": "90f31b77-82d1-49b0-b50c-5b8b08a98e77",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.506495",
+          "updated_at": "2026-06-13T01:43:00.506496"
+        }
+      ]
+    },
+    {
+      "project_id": "beb5e1b8-ae16-4d9e-888f-558f0c79c09b",
+      "project_name": "UI",
+      "task_types": [
+        {
+          "id": "11161b9d-e54a-4752-a98c-11304d263b47",
+          "project_id": "beb5e1b8-ae16-4d9e-888f-558f0c79c09b",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.534387",
+          "updated_at": "2026-06-13T01:43:00.534388"
+        },
+        {
+          "id": "ee65a724-dbf1-41ae-9600-5ad9f0521ba8",
+          "project_id": "beb5e1b8-ae16-4d9e-888f-558f0c79c09b",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.534389",
+          "updated_at": "2026-06-13T01:43:00.534390"
+        },
+        {
+          "id": "8881fcd1-6ce0-49b1-bd26-283766ebf47c",
+          "project_id": "beb5e1b8-ae16-4d9e-888f-558f0c79c09b",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.534390",
+          "updated_at": "2026-06-13T01:43:00.534391"
+        },
+        {
+          "id": "dd2ba6f7-17de-4225-acb8-37d3ccf3d022",
+          "project_id": "beb5e1b8-ae16-4d9e-888f-558f0c79c09b",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.534392",
+          "updated_at": "2026-06-13T01:43:00.534392"
+        },
+        {
+          "id": "4ce93aae-f94a-45bd-b229-dfa1fbbfd6d8",
+          "project_id": "beb5e1b8-ae16-4d9e-888f-558f0c79c09b",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.534393",
+          "updated_at": "2026-06-13T01:43:00.534394"
+        }
+      ]
+    },
+    {
+      "project_id": "2636d91d-b81b-4845-ad80-1b987d3a6361",
+      "project_name": "Other Concerns",
+      "task_types": [
+        {
+          "id": "208814cc-71ec-45b4-adce-77b221fceec9",
+          "project_id": "2636d91d-b81b-4845-ad80-1b987d3a6361",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.551253",
+          "updated_at": "2026-06-13T01:43:00.551255"
+        },
+        {
+          "id": "ab208444-7fae-4b8e-be14-7f2081d07a25",
+          "project_id": "2636d91d-b81b-4845-ad80-1b987d3a6361",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.551257",
+          "updated_at": "2026-06-13T01:43:00.551258"
+        },
+        {
+          "id": "bee24f68-7aac-47a2-a576-6a7618b7ee0e",
+          "project_id": "2636d91d-b81b-4845-ad80-1b987d3a6361",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.551259",
+          "updated_at": "2026-06-13T01:43:00.551260"
+        },
+        {
+          "id": "528b5473-dec0-4512-beed-dae34442cfd4",
+          "project_id": "2636d91d-b81b-4845-ad80-1b987d3a6361",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.551262",
+          "updated_at": "2026-06-13T01:43:00.551263"
+        },
+        {
+          "id": "74fc54a7-4bfb-442b-89b2-7cdbc9ab40ee",
+          "project_id": "2636d91d-b81b-4845-ad80-1b987d3a6361",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-13T01:43:00.551264",
+          "updated_at": "2026-06-13T01:43:00.551265"
+        }
+      ]
+    },
+    {
+      "project_id": "ce214ae6-086f-462a-931d-c2dcac7155bf",
+      "project_name": "Scryer Io",
+      "task_types": [
+        {
+          "id": "34bc551c-6612-4daa-801d-0b36eb78c918",
+          "project_id": "ce214ae6-086f-462a-931d-c2dcac7155bf",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.368415",
+          "updated_at": "2026-06-14T04:02:04.368417"
+        },
+        {
+          "id": "c0549ac8-e9fa-4a64-9fbe-c4d18248f0b1",
+          "project_id": "ce214ae6-086f-462a-931d-c2dcac7155bf",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.368419",
+          "updated_at": "2026-06-14T04:02:04.368420"
+        },
+        {
+          "id": "2a145c8c-c271-4274-840c-a71888f7a1ae",
+          "project_id": "ce214ae6-086f-462a-931d-c2dcac7155bf",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.368421",
+          "updated_at": "2026-06-14T04:02:04.368422"
+        },
+        {
+          "id": "2a450cc8-dce0-486d-9a4c-254240300b9b",
+          "project_id": "ce214ae6-086f-462a-931d-c2dcac7155bf",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.368423",
+          "updated_at": "2026-06-14T04:02:04.368424"
+        },
+        {
+          "id": "07600ae0-5014-4f82-beb6-864d23ed8856",
+          "project_id": "ce214ae6-086f-462a-931d-c2dcac7155bf",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.368425",
+          "updated_at": "2026-06-14T04:02:04.368426"
+        }
+      ]
+    },
+    {
+      "project_id": "ee5d9e92-440e-4df1-8b6f-1fd4768c3526",
+      "project_name": "Chess",
+      "task_types": [
+        {
+          "id": "af079395-d051-485c-b4c3-6f4d316dd8d6",
+          "project_id": "ee5d9e92-440e-4df1-8b6f-1fd4768c3526",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.378334",
+          "updated_at": "2026-06-14T04:02:04.378336"
+        },
+        {
+          "id": "66dd2f14-b752-4151-8d12-26642028f6b3",
+          "project_id": "ee5d9e92-440e-4df1-8b6f-1fd4768c3526",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.378337",
+          "updated_at": "2026-06-14T04:02:04.378338"
+        },
+        {
+          "id": "f111277e-4176-4c25-a61c-7d6d6184cf8f",
+          "project_id": "ee5d9e92-440e-4df1-8b6f-1fd4768c3526",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.378339",
+          "updated_at": "2026-06-14T04:02:04.378340"
+        },
+        {
+          "id": "dbc6ca0b-cab5-4736-b324-56a2a15b9b32",
+          "project_id": "ee5d9e92-440e-4df1-8b6f-1fd4768c3526",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.378341",
+          "updated_at": "2026-06-14T04:02:04.378341"
+        },
+        {
+          "id": "bdc72fee-f595-451a-a768-feba3430a1d6",
+          "project_id": "ee5d9e92-440e-4df1-8b6f-1fd4768c3526",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-14T04:02:04.378342",
+          "updated_at": "2026-06-14T04:02:04.378343"
+        }
+      ]
+    },
+    {
+      "project_id": "848114d4-ec8c-4b6e-9ca0-a87c03e8e567",
+      "project_name": "TinyThought",
+      "task_types": [
+        {
+          "id": "ef601e41-8b57-47b5-8f5e-64b841e5db35",
+          "project_id": "848114d4-ec8c-4b6e-9ca0-a87c03e8e567",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-17T04:18:31.627115",
+          "updated_at": "2026-06-17T04:18:31.627119"
+        },
+        {
+          "id": "452c27ae-de80-4f5d-a2b2-8c0071156778",
+          "project_id": "848114d4-ec8c-4b6e-9ca0-a87c03e8e567",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-17T04:18:31.627120",
+          "updated_at": "2026-06-17T04:18:31.627121"
+        },
+        {
+          "id": "76e27283-fac0-40f2-a5eb-32d68bd54fe3",
+          "project_id": "848114d4-ec8c-4b6e-9ca0-a87c03e8e567",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-17T04:18:31.627122",
+          "updated_at": "2026-06-17T04:18:31.627122"
+        },
+        {
+          "id": "f830e166-61cf-417a-a50e-2afa093f0701",
+          "project_id": "848114d4-ec8c-4b6e-9ca0-a87c03e8e567",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-17T04:18:31.627123",
+          "updated_at": "2026-06-17T04:18:31.627124"
+        },
+        {
+          "id": "cff6550e-18ee-4f34-907c-9a56bbf67200",
+          "project_id": "848114d4-ec8c-4b6e-9ca0-a87c03e8e567",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-17T04:18:31.627125",
+          "updated_at": "2026-06-17T04:18:31.627125"
+        }
+      ]
+    },
+    {
+      "project_id": "5c712a83-cac2-4159-9165-9ac44ae8346f",
+      "project_name": "Samwell Tarly",
+      "task_types": [
+        {
+          "id": "3f9b1efa-98d3-4a86-9701-5d579a02e842",
+          "project_id": "5c712a83-cac2-4159-9165-9ac44ae8346f",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-17T05:16:17.222217",
+          "updated_at": "2026-06-17T05:16:17.222221"
+        },
+        {
+          "id": "c706d023-5d3c-4c81-9b2b-cfae97818613",
+          "project_id": "5c712a83-cac2-4159-9165-9ac44ae8346f",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-17T05:16:17.222222",
+          "updated_at": "2026-06-17T05:16:17.222222"
+        },
+        {
+          "id": "c73dab37-b453-4781-beb6-16d6f127da3d",
+          "project_id": "5c712a83-cac2-4159-9165-9ac44ae8346f",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-17T05:16:17.222223",
+          "updated_at": "2026-06-17T05:16:17.222224"
+        },
+        {
+          "id": "add205c4-bd6f-4781-a804-f93902c40647",
+          "project_id": "5c712a83-cac2-4159-9165-9ac44ae8346f",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-17T05:16:17.222224",
+          "updated_at": "2026-06-17T05:16:17.222225"
+        },
+        {
+          "id": "ed9ab651-7a96-44d0-86da-c308826615ff",
+          "project_id": "5c712a83-cac2-4159-9165-9ac44ae8346f",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-17T05:16:17.222226",
+          "updated_at": "2026-06-17T05:16:17.222226"
+        },
+        {
+          "id": "7158018c-f875-47b7-90b6-0ebd6847b009",
+          "project_id": "5c712a83-cac2-4159-9165-9ac44ae8346f",
+          "key": "ticket",
+          "name": "Ticket",
+          "color": "#f0b429",
+          "icon": "ticket",
+          "behavior_json": "{}",
+          "is_default": 1,
+          "created_at": "2026-06-17T05:16:17.233531",
+          "updated_at": "2026-06-17T05:16:17.233543"
+        }
+      ]
+    },
+    {
+      "project_id": "24cc473d-930e-4d72-a602-dc8cdaab4bec",
+      "project_name": "scryer-cmux",
+      "task_types": [
+        {
+          "id": "98603038-b197-42a8-8dbc-793bd59fac52",
+          "project_id": "24cc473d-930e-4d72-a602-dc8cdaab4bec",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-18T15:16:39.097679",
+          "updated_at": "2026-06-18T15:16:39.097682"
+        },
+        {
+          "id": "26f58df0-f7a6-4852-a03f-37ed962349d9",
+          "project_id": "24cc473d-930e-4d72-a602-dc8cdaab4bec",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-18T15:16:39.097683",
+          "updated_at": "2026-06-18T15:16:39.097684"
+        },
+        {
+          "id": "3c8386ef-f57c-4663-87e6-fbf56cd61caf",
+          "project_id": "24cc473d-930e-4d72-a602-dc8cdaab4bec",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-18T15:16:39.097685",
+          "updated_at": "2026-06-18T15:16:39.097685"
+        },
+        {
+          "id": "b5a4554e-4c3c-48af-a885-fab0ac4e72c5",
+          "project_id": "24cc473d-930e-4d72-a602-dc8cdaab4bec",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-18T15:16:39.097686",
+          "updated_at": "2026-06-18T15:16:39.097687"
+        },
+        {
+          "id": "0b54e1f2-ed21-40ff-ac35-ae9a20edd769",
+          "project_id": "24cc473d-930e-4d72-a602-dc8cdaab4bec",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-18T15:16:39.097687",
+          "updated_at": "2026-06-18T15:16:39.097688"
+        }
+      ]
+    },
+    {
+      "project_id": "d438ca07-97b1-451f-8749-1ac99ef00829",
+      "project_name": "Agent Sessions",
+      "task_types": [
+        {
+          "id": "8370dbc3-0a75-43dc-9316-0f26d78d129e",
+          "project_id": "d438ca07-97b1-451f-8749-1ac99ef00829",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-22T01:57:49.771070",
+          "updated_at": "2026-06-22T01:57:49.771073"
+        },
+        {
+          "id": "2dee970d-4deb-480c-b521-8f9242aa1e14",
+          "project_id": "d438ca07-97b1-451f-8749-1ac99ef00829",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-22T01:57:49.771074",
+          "updated_at": "2026-06-22T01:57:49.771075"
+        },
+        {
+          "id": "0e8f3155-10a5-4375-b924-2a2a6b2e6c44",
+          "project_id": "d438ca07-97b1-451f-8749-1ac99ef00829",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-22T01:57:49.771075",
+          "updated_at": "2026-06-22T01:57:49.771076"
+        },
+        {
+          "id": "7ceba376-e91d-46df-b5ed-d543f01e3033",
+          "project_id": "d438ca07-97b1-451f-8749-1ac99ef00829",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-22T01:57:49.771077",
+          "updated_at": "2026-06-22T01:57:49.771077"
+        },
+        {
+          "id": "e38bc0eb-881e-43a9-8190-c46a424de8ec",
+          "project_id": "d438ca07-97b1-451f-8749-1ac99ef00829",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-22T01:57:49.771078",
+          "updated_at": "2026-06-22T01:57:49.771078"
+        }
+      ]
+    },
+    {
+      "project_id": "dafdfb91-0aa6-4fc8-bb8e-e0f656442178",
+      "project_name": "Battle City",
+      "task_types": [
+        {
+          "id": "7c55a8fa-8b0d-4b8e-adf7-9948400e27ca",
+          "project_id": "dafdfb91-0aa6-4fc8-bb8e-e0f656442178",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-23T15:37:28.954931",
+          "updated_at": "2026-06-23T15:37:28.954934"
+        },
+        {
+          "id": "f476dd63-33f7-4546-a90d-3f3c4b7d7098",
+          "project_id": "dafdfb91-0aa6-4fc8-bb8e-e0f656442178",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-23T15:37:28.954935",
+          "updated_at": "2026-06-23T15:37:28.954936"
+        },
+        {
+          "id": "6ebb912c-e2ee-4505-9b4e-18e6a4902030",
+          "project_id": "dafdfb91-0aa6-4fc8-bb8e-e0f656442178",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-23T15:37:28.954937",
+          "updated_at": "2026-06-23T15:37:28.954938"
+        },
+        {
+          "id": "89987626-9c75-4214-910c-9faae2c9ef3a",
+          "project_id": "dafdfb91-0aa6-4fc8-bb8e-e0f656442178",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-23T15:37:28.954939",
+          "updated_at": "2026-06-23T15:37:28.954940"
+        },
+        {
+          "id": "6e81104a-0a89-4919-98af-85b310be9e06",
+          "project_id": "dafdfb91-0aa6-4fc8-bb8e-e0f656442178",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-23T15:37:28.954941",
+          "updated_at": "2026-06-23T15:37:28.954942"
+        }
+      ]
+    },
+    {
+      "project_id": "e1b9a135-4c08-495e-a108-877451b88c90",
+      "project_name": "So Much For Subtlety",
+      "task_types": [
+        {
+          "id": "09d767bd-edbe-4ea1-a4b4-3b156f5a19fc",
+          "project_id": "e1b9a135-4c08-495e-a108-877451b88c90",
+          "key": "debate",
+          "name": "Debate",
+          "color": "#a855f7",
+          "icon": "messages-square",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": false}",
+          "is_default": 1,
+          "created_at": "2026-06-27T05:42:54.627381",
+          "updated_at": "2026-06-27T05:42:54.627382"
+        },
+        {
+          "id": "6e2c954a-89bc-4bff-be33-7f3854fa80d5",
+          "project_id": "e1b9a135-4c08-495e-a108-877451b88c90",
+          "key": "research",
+          "name": "Research",
+          "color": "#0f766e",
+          "icon": "search",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-27T05:42:54.627384",
+          "updated_at": "2026-06-27T05:42:54.627384"
+        },
+        {
+          "id": "edd44756-0269-4729-a55b-16281a45ca8d",
+          "project_id": "e1b9a135-4c08-495e-a108-877451b88c90",
+          "key": "work",
+          "name": "Work",
+          "color": "#2563eb",
+          "icon": "hammer",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-27T05:42:54.627385",
+          "updated_at": "2026-06-27T05:42:54.627386"
+        },
+        {
+          "id": "1a778688-ab92-45ad-9e7a-9b919f27dd2e",
+          "project_id": "e1b9a135-4c08-495e-a108-877451b88c90",
+          "key": "bug",
+          "name": "Bug",
+          "color": "#dc2626",
+          "icon": "bug",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-27T05:42:54.627387",
+          "updated_at": "2026-06-27T05:42:54.627387"
+        },
+        {
+          "id": "1d6c203e-69e7-4ce6-a630-47834509579c",
+          "project_id": "e1b9a135-4c08-495e-a108-877451b88c90",
+          "key": "feature",
+          "name": "Feature",
+          "color": "#7c3aed",
+          "icon": "sparkles",
+          "behavior_json": "{\"allow_child_tasks\": true, \"allow_dependencies\": true}",
+          "is_default": 1,
+          "created_at": "2026-06-27T05:42:54.627388",
+          "updated_at": "2026-06-27T05:42:54.627388"
+        }
+      ]
+    }
+  ]
+}
