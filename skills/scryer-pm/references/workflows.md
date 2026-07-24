@@ -4,6 +4,9 @@
 
 ## Cache principles
 
+- CWD touched-ticket index: check `~/.pi/agent/scryer/cwd-ticket-index.json` first for current cwd and ancestors up to `$HOME`; dedupe by `ticket_id`.
+- Touch records are flat: `cwd`, `project_id`, `project_name`, `ticket_id`, `task_name`, `touched_at`.
+- `touched_at` is only for 30-day pruning/archive; do not rank by timestamp.
 - Project IDs: re-read `~/.pi/agent/scryer/projects.json` whenever project-name resolution matters.
 - Task IDs: use `~/.pi/agent/scryer/projects/<project_id>.json` as a minimal `{ id, title }` index.
 - Full task details always come from `GET /api/tasks/{task_id}`.

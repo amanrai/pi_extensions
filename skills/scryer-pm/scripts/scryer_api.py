@@ -18,6 +18,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+try:
+    from scryer_cache import touch_ticket_from_task
+except Exception:  # Keep API helper usable even if cache helper import fails.
+    touch_ticket_from_task = None
+
 DEFAULT_BASE_URL = "http://100.105.192.98:43210"
 
 
@@ -77,13 +82,25 @@ def main() -> int:
         print(f"HTTP {status}")
         return 0
 
+    parsed_response = None
+    try:
+        parsed_response = json.loads(body)
+    except Exception:
+        pass
+
+    if touch_ticket_from_task and isinstance(parsed_response, dict):
+        try:
+            touch_ticket_from_task(parsed_response)
+        except Exception:
+            pass
+
     if args.raw:
         sys.stdout.buffer.write(body)
         return 0
 
-    try:
-        print(json.dumps(json.loads(body), indent=2, sort_keys=True))
-    except Exception:
+    if parsed_response is not None:
+        print(json.dumps(parsed_response, indent=2, sort_keys=True))
+    else:
         print(body.decode("utf-8", "replace"))
     return 0
 

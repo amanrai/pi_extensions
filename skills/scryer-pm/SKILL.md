@@ -40,6 +40,35 @@ After fetching the Scryer ticket and comments, explain what the ticket says and 
 
 ## Cache rules
 
+### CWD touched-ticket index
+
+Scryer maintains a local index of tickets touched from each working directory:
+
+```text
+~/.pi/agent/scryer/cwd-ticket-index.json
+```
+
+Each record is flat:
+
+```json
+{
+  "cwd": "/exact/pi/cwd",
+  "project_id": "...",
+  "project_name": "...",
+  "ticket_id": "...",
+  "task_name": "...",
+  "touched_at": "..."
+}
+```
+
+A read is a touch. Any successful ticket interaction should record a touch: task detail reads, comments, updates, creates, deletes, blockers, tags, or any task-ID-related Scryer operation. The timestamp is only for pruning/archive; do not use it for ranking relevance.
+
+For cwd `/Users/amanrai/a/b/c`, lookup touched tickets for all exact cwd prefixes up to `$HOME`: `/Users/amanrai/a/b/c`, `/Users/amanrai/a/b`, `/Users/amanrai/a`, `/Users/amanrai`. Gather all records and dedupe by `ticket_id`; order does not matter.
+
+When a user asks for "the ticket" or gives a partial ticket name, check this cwd index first. If exactly one relevant ticket is found, use its `ticket_id` and go directly to `GET /api/tasks/{task_id}`. If multiple candidates match, show candidates and ask which one. Fall back to project/task caches only when cwd index has no clear match.
+
+Records older than 30 days are pruned from the active index and moved to `~/.pi/agent/scryer/cwd-ticket-archive.json`. The archive is write-only history; do not read it for lookup.
+
 ### Project cache
 
 The footer extension refreshes project names/IDs every 30 seconds and writes:
@@ -93,9 +122,11 @@ python scripts/scryer_api.py POST /api/comments --json '{"author_role":"pi-agent
 python scripts/scryer_api.py PATCH /api/tasks/<task_id> --json '{"status":"in_execution"}'
 ```
 
-Use the cache helper only to resolve projects or refresh/ensure the per-project task ID cache:
+Use the cache helper to resolve projects, refresh/ensure the per-project task ID cache, and inspect/touch cwd ticket lookup records:
 
 ```bash
+python scripts/scryer_cache.py lookup-cwd-tickets --query "manifold"
+python scripts/scryer_cache.py touch-ticket --project-id <project_id> --project-name "Chess" --ticket-id <task_id> --task-name "Manifold separator"
 python scripts/scryer_cache.py find-project "Chess"
 python scripts/scryer_cache.py ensure-project-tasks <project_id> --project-name "Chess"
 ```
@@ -104,23 +135,26 @@ Do not use a separate task-finding helper as the workflow. Read/search `~/.pi/ag
 
 ## Look at a ticket/story/task
 
-1. Re-read `~/.pi/agent/scryer/projects.json` and resolve the project ID.
-2. Read `~/.pi/agent/scryer/projects/<project_id>.json`.
-3. If that file is missing or older than 10 minutes, run `python scripts/scryer_cache.py ensure-project-tasks <project_id> --project-name "<name>"`.
-4. Search the per-project JSON directly for the ticket/story/task title and read its ID.
-5. If not found, refresh the project task cache once, re-read the JSON, and search again.
-6. If still not found, report that it was not found and mention that both cache and refreshed API-backed cache were checked.
-7. Fetch authoritative task details: `GET /api/tasks/{task_id}`.
-8. Fetch task comments: `GET /api/tasks/{task_id}/comments`.
-9. Summarize only the Scryer ticket/comments.
-10. Offer to inspect repo/source/git/handoff context, but do not do it yet.
+1. Check `~/.pi/agent/scryer/cwd-ticket-index.json` first for current cwd and all ancestors up to `$HOME`; dedupe by `ticket_id`.
+2. If the cwd index gives one clear match, use that `ticket_id` and skip `projects.json`, per-project task cache lookup, and project/task list API calls.
+3. If multiple cwd-index candidates match, ask the user which one.
+4. If cwd index has no clear match, re-read `~/.pi/agent/scryer/projects.json` and resolve the project ID.
+5. Read `~/.pi/agent/scryer/projects/<project_id>.json`.
+6. If that file is missing or older than 10 minutes, run `python scripts/scryer_cache.py ensure-project-tasks <project_id> --project-name "<name>"`.
+7. Search the per-project JSON directly for the ticket/story/task title and read its ID.
+8. If not found, refresh the project task cache once, re-read the JSON, and search again.
+9. If still not found, report that it was not found and mention that both cache and refreshed API-backed cache were checked.
+10. Fetch authoritative task details: `GET /api/tasks/{task_id}`. This records a cwd touch when using `scripts/scryer_api.py`.
+11. Fetch task comments: `GET /api/tasks/{task_id}/comments`.
+12. Summarize only the Scryer ticket/comments.
+13. Offer to inspect repo/source/git/handoff context, but do not do it yet.
 
 If the user gives an explicit task ID, you may skip cache ID resolution and fetch `GET /api/tasks/{task_id}` directly.
 
 ## Update or comment on a ticket/story/task
 
 1. Resolve the task ID using the lookup flow above, unless the user gave an explicit ID.
-2. Fetch authoritative current details: `GET /api/tasks/{task_id}`.
+2. Fetch authoritative current details: `GET /api/tasks/{task_id}`. Ensure this ticket is recorded in the cwd touched-ticket index.
 3. Decide whether this is a comment or field update:
    - Progress notes, findings, handoff notes, status commentary → `POST /api/comments`.
    - Canonical field changes such as title, description, status, parent, tags, or type → `PATCH /api/tasks/{task_id}`.
@@ -140,7 +174,7 @@ If the user gives an explicit task ID, you may skip cache ID resolution and fetc
    - `Work` for general tickets/stories/tasks
 4. Task type IDs are project-specific. Use `references/task-taxonomy.json` for the current project-specific task-type ID snapshot; fetch that project's task types only if missing/stale/rejected.
 5. Create via `POST /api/projects/{project_id}/tasks` or `POST /api/tasks`.
-6. After creation, refresh the per-project task ID cache so newly-created tickets can be found by name later.
+6. After creation, record the new ticket immediately in the cwd touched-ticket index and refresh the per-project task ID cache so newly-created tickets can be found by name later.
 
 ## Optional data: only when asked or clearly needed
 
