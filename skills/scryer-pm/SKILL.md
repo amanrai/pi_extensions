@@ -48,7 +48,7 @@ The Pi footer extension refreshes Scryer project names/IDs every 30 seconds and 
 ~/.pi/agent/scryer/projects.json
 ```
 
-When resolving a project name to an ID, read this file first. It contains:
+When resolving a project name to an ID, read this file first. Re-read it each time you need project-name resolution or before a meaningful Scryer operation; do not assume a project list you loaded earlier in the conversation is still current. It contains:
 
 ```json
 {
@@ -59,7 +59,7 @@ When resolving a project name to an ID, read this file first. It contains:
 }
 ```
 
-Only call `GET /api/projects` if the cache file is missing/unreadable or the requested project is not present in the cached list, which usually means it was created less than one refresh interval ago or the footer extension is not active.
+Only call `GET /api/projects` if the freshly re-read cache file is missing/unreadable or the requested project is not present in the cached list, which usually means it was created less than one refresh interval ago or the footer extension is not active.
 
 ## API access
 
@@ -94,7 +94,7 @@ Resolve relative paths from the skill directory. If this skill is installed glob
 
 ## Common starting points
 
-- Resolve project names/IDs: read `~/.pi/agent/scryer/projects.json` first; only fall back to `GET /api/projects` if missing or not found
+- Resolve project names/IDs: re-read `~/.pi/agent/scryer/projects.json` first each time; only fall back to `GET /api/projects` if missing or not found
 - List projects: `GET /api/projects`
 - List tasks/tickets/stories globally: `GET /api/tasks`
 - List tasks in a project: `GET /api/projects/{project_id}/tasks`
