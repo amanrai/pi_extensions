@@ -14,7 +14,9 @@ import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { execFile } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -45,6 +47,8 @@ interface PMProject { id: string; name: string; }
 const PM_API_BASE_URL = process.env.PI_PM_API_BASE_URL ?? "http://100.105.192.98:43210";
 const PM_REFRESH_INTERVAL_MS = 30_000;
 const PM_RENDER_TICK_MS = 1_000;
+const PM_CACHE_DIR = join(homedir(), ".pi", "agent", "scryer");
+const PM_PROJECT_CACHE_PATH = join(PM_CACHE_DIR, "projects.json");
 
 async function fetchStarshipPrompt(cwd: string, width: number): Promise<string | null> {
   try {
@@ -111,6 +115,16 @@ function formatSecondsRemaining(targetTime: number | null): string {
   return `${seconds}s`;
 }
 
+async function writePMProjectCache(projects: PMProject[]) {
+  await mkdir(PM_CACHE_DIR, { recursive: true });
+  await writeFile(PM_PROJECT_CACHE_PATH, JSON.stringify({
+    base_url: PM_API_BASE_URL,
+    updated_at: new Date().toISOString(),
+    refresh_interval_ms: PM_REFRESH_INTERVAL_MS,
+    projects,
+  }, null, 2) + "\n", "utf8");
+}
+
 // ── Extension ────────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
@@ -121,6 +135,7 @@ export default function (pi: ExtensionAPI) {
   let requestRender: (() => void) | undefined;
   let pmProjects: PMProject[]       = [];
   let pmProjectError: string | null = null;
+  let pmCacheError: string | null   = null;
   let pmUpdating                    = false;
   let pmNextUpdateAt: number | null = null;
   let pmRefreshTimer: ReturnType<typeof setInterval> | undefined;
@@ -142,6 +157,12 @@ export default function (pi: ExtensionAPI) {
     try {
       pmProjects = await fetchPMProjects(controller.signal);
       pmProjectError = null;
+      try {
+        await writePMProjectCache(pmProjects);
+        pmCacheError = null;
+      } catch (error) {
+        pmCacheError = error instanceof Error ? error.message : String(error);
+      }
     } catch (error) {
       if ((error as { name?: string }).name !== "AbortError") {
         pmProjectError = error instanceof Error ? error.message : String(error);
@@ -211,7 +232,9 @@ export default function (pi: ExtensionAPI) {
 
           const pmStatus = pmProjectError
             ? yellow(`(Scryer offline, retry in ${formatSecondsRemaining(pmNextUpdateAt)})`)
-            : green(`(tracking ${pmProjects.length} projects in Scryer, updates in ${formatSecondsRemaining(pmNextUpdateAt)})`);
+            : pmCacheError
+              ? yellow(`(tracking ${pmProjects.length} projects in Scryer, cache write failed, updates in ${formatSecondsRemaining(pmNextUpdateAt)})`)
+              : green(`(tracking ${pmProjects.length} projects in Scryer, updates in ${formatSecondsRemaining(pmNextUpdateAt)})`);
           leftParts.push(" " + (pmUpdating ? yellow("updating Scryer…") : pmStatus));
 
           const left = leftParts.join("");

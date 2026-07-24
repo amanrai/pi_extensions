@@ -40,6 +40,27 @@ If the user intent is ambiguous, ask whether they mean Scryer before calling the
   - `created_by_instance_key` / `author_instance_key` / `actor_instance_key`: use a stable local identifier if available; otherwise use `pi`.
 - Summarize API results in human terms. Include IDs when they will be useful for follow-up.
 
+## Project ID cache
+
+The Pi footer extension refreshes Scryer project names/IDs every 30 seconds and writes them to:
+
+```text
+~/.pi/agent/scryer/projects.json
+```
+
+When resolving a project name to an ID, read this file first. It contains:
+
+```json
+{
+  "base_url": "http://100.105.192.98:43210",
+  "updated_at": "...",
+  "refresh_interval_ms": 30000,
+  "projects": [{ "id": "...", "name": "..." }]
+}
+```
+
+Only call `GET /api/projects` if the cache file is missing/unreadable or the requested project is not present in the cached list, which usually means it was created less than one refresh interval ago or the footer extension is not active.
+
 ## API access
 
 Default base URL:
@@ -73,6 +94,7 @@ Resolve relative paths from the skill directory. If this skill is installed glob
 
 ## Common starting points
 
+- Resolve project names/IDs: read `~/.pi/agent/scryer/projects.json` first; only fall back to `GET /api/projects` if missing or not found
 - List projects: `GET /api/projects`
 - List tasks/tickets/stories globally: `GET /api/tasks`
 - List tasks in a project: `GET /api/projects/{project_id}/tasks`

@@ -1,5 +1,15 @@
 # Scryer PM workflows
 
+## Project lookup cache
+
+Before calling `GET /api/projects` to resolve a project name, read the local cache written by the Pi footer extension:
+
+```text
+~/.pi/agent/scryer/projects.json
+```
+
+Use `projects[].name` and `projects[].id` from that file for normal project-name resolution. Only fall back to `GET /api/projects` when the cache file is missing/unreadable or the requested project is absent from the cache, which usually means it is newly created or the extension is not active.
+
 ## Identify records safely
 
 1. Determine the entity type from the user's wording:
@@ -41,7 +51,7 @@ Use when the user says "look at the ticket", "what does the story say", "find th
 
 ## Create a ticket/story/task
 
-1. Identify the project first. Use `GET /api/projects`; if ambiguous, ask.
+1. Identify the project first. Read `~/.pi/agent/scryer/projects.json`; use `GET /api/projects` only if the cache is unavailable or the project is not found. If ambiguous, ask.
 2. Choose status from `references/task-taxonomy.md`; usually `unopened` for newly captured work.
 3. Choose task type from `references/task-taxonomy.md`. Task type IDs are project-specific; use the snapshot in `references/task-taxonomy.json` or fetch that project's task types once.
 4. Create with `POST /api/projects/{project_id}/tasks` or `POST /api/tasks`.
@@ -66,7 +76,8 @@ Confirm before adding/removing blockers if the direction is unclear. "A blocks B
 
 ## Project workflows
 
-- List projects: `GET /api/projects`.
+- Resolve/list projects from cache first: `~/.pi/agent/scryer/projects.json`.
+- Fall back to API list only when needed: `GET /api/projects`.
 - Get project: `GET /api/projects/{project_id}`.
 - Children/subprojects: `GET /api/projects/{project_id}/children` or `/subprojects`.
 - Project tasks: `GET /api/projects/{project_id}/tasks`.
