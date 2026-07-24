@@ -40,6 +40,11 @@ function formatPwd(cwd: string): string {
 // ── Data fetching ────────────────────────────────────────────────────────────
 
 interface PRInfo { number: number; url: string; }
+interface PMProject { id: string; name: string; }
+
+const PM_API_BASE_URL = process.env.PI_PM_API_BASE_URL ?? "http://100.105.192.98:43210";
+const PM_REFRESH_INTERVAL_MS = 30_000;
+const PM_RENDER_TICK_MS = 1_000;
 
 async function fetchStarshipPrompt(cwd: string, width: number): Promise<string | null> {
   try {
@@ -88,6 +93,24 @@ async function fetchPR(cwd: string): Promise<PRInfo | null> {
   } catch { return null; }
 }
 
+async function fetchPMProjects(signal?: AbortSignal): Promise<PMProject[]> {
+  const response = await fetch(`${PM_API_BASE_URL}/api/projects`, { signal });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+  const projects = await response.json() as Array<{ id?: unknown; name?: unknown }>;
+  return projects
+    .filter((project): project is { id: string; name: string } =>
+      typeof project.id === "string" && typeof project.name === "string",
+    )
+    .map(({ id, name }) => ({ id, name }));
+}
+
+function formatSecondsRemaining(targetTime: number | null): string {
+  if (!targetTime) return "--s";
+  const seconds = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
+  return `${seconds}s`;
+}
+
 // ── Extension ────────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
@@ -96,10 +119,40 @@ export default function (pi: ExtensionAPI) {
   let thinkingLevel: string         = "off";
   let lastRenderWidth               = 120;
   let requestRender: (() => void) | undefined;
+  let pmProjects: PMProject[]       = [];
+  let pmProjectError: string | null = null;
+  let pmUpdating                    = false;
+  let pmNextUpdateAt: number | null = null;
+  let pmRefreshTimer: ReturnType<typeof setInterval> | undefined;
+  let pmRenderTimer: ReturnType<typeof setInterval> | undefined;
+  let pmAbortController: AbortController | undefined;
 
   async function refreshStarship(cwd: string, width: number) {
     starshipPrompt = await fetchStarshipPrompt(cwd, width);
     requestRender?.();
+  }
+
+  async function refreshPMProjects() {
+    pmAbortController?.abort();
+    const controller = new AbortController();
+    pmAbortController = controller;
+    pmUpdating = true;
+    requestRender?.();
+
+    try {
+      pmProjects = await fetchPMProjects(controller.signal);
+      pmProjectError = null;
+    } catch (error) {
+      if ((error as { name?: string }).name !== "AbortError") {
+        pmProjectError = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      if (pmAbortController === controller) {
+        pmUpdating = false;
+        pmNextUpdateAt = Date.now() + PM_REFRESH_INTERVAL_MS;
+        requestRender?.();
+      }
+    }
   }
 
   async function refreshAll(ctx: ExtensionContext) {
@@ -110,9 +163,26 @@ export default function (pi: ExtensionAPI) {
     requestRender?.();
   }
 
+  function stopPMTimers() {
+    if (pmRefreshTimer) clearInterval(pmRefreshTimer);
+    if (pmRenderTimer) clearInterval(pmRenderTimer);
+    pmRefreshTimer = undefined;
+    pmRenderTimer = undefined;
+    pmAbortController?.abort();
+    pmAbortController = undefined;
+  }
+
+  function startPMTimers() {
+    stopPMTimers();
+    refreshPMProjects();
+    pmRefreshTimer = setInterval(refreshPMProjects, PM_REFRESH_INTERVAL_MS);
+    pmRenderTimer = setInterval(() => requestRender?.(), PM_RENDER_TICK_MS);
+  }
+
   pi.on("session_start", async (_event, ctx) => {
     thinkingLevel = pi.getThinkingLevel();
     refreshAll(ctx);
+    startPMTimers();
     ctx.ui.setFooter((tui, _theme, footerData) => {
       requestRender = () => tui.requestRender();
 
@@ -138,6 +208,11 @@ export default function (pi: ExtensionAPI) {
           if (pr) {
             leftParts.push(" " + hyperlink(pr.url, bold(cyan(`PR #${pr.number}`))));
           }
+
+          const pmStatus = pmProjectError
+            ? yellow(`PM offline · retry ${formatSecondsRemaining(pmNextUpdateAt)}`)
+            : green(`PM ${pmProjects.length} · next ${formatSecondsRemaining(pmNextUpdateAt)}`);
+          leftParts.push(" " + (pmUpdating ? yellow("PM updating…") : pmStatus));
 
           const left = leftParts.join("");
           // ── Right: model ◆ thinking  ↑in ↓out $cost ────────────────────
@@ -193,5 +268,10 @@ export default function (pi: ExtensionAPI) {
   pi.on("thinking_level_select", async (event, _ctx) => {
     thinkingLevel = event.level;
     requestRender?.();
+  });
+
+  pi.on("session_shutdown", () => {
+    stopPMTimers();
+    requestRender = undefined;
   });
 }
