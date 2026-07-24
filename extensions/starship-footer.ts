@@ -210,9 +210,9 @@ export default function (pi: ExtensionAPI) {
           }
 
           const pmStatus = pmProjectError
-            ? yellow(`PM offline · retry ${formatSecondsRemaining(pmNextUpdateAt)}`)
-            : green(`PM ${pmProjects.length} · next ${formatSecondsRemaining(pmNextUpdateAt)}`);
-          leftParts.push(" " + (pmUpdating ? yellow("PM updating…") : pmStatus));
+            ? yellow(`Scryer offline · retry ${formatSecondsRemaining(pmNextUpdateAt)}`)
+            : green(`(tracking ${pmProjects.length} projects in Scryer) · next ${formatSecondsRemaining(pmNextUpdateAt)}`);
+          leftParts.push(" " + (pmUpdating ? yellow("updating Scryer…") : pmStatus));
 
           const left = leftParts.join("");
           // ── Right: model ◆ thinking  ↑in ↓out $cost ────────────────────
