@@ -230,12 +230,12 @@ export default function (pi: ExtensionAPI) {
             leftParts.push(" " + hyperlink(pr.url, bold(cyan(`PR #${pr.number}`))));
           }
 
-          const pmStatus = pmProjectError
-            ? yellow(`(Scryer offline, retry in ${formatSecondsRemaining(pmNextUpdateAt)})`)
-            : pmCacheError
-              ? yellow(`(tracking ${pmProjects.length} projects in Scryer, cache write failed, updates in ${formatSecondsRemaining(pmNextUpdateAt)})`)
-              : green(`(tracking ${pmProjects.length} projects in Scryer, updates in ${formatSecondsRemaining(pmNextUpdateAt)})`);
-          leftParts.push(" " + (pmUpdating ? yellow("updating Scryer…") : pmStatus));
+          // const pmStatus = pmProjectError
+          //   ? yellow(`(Scryer offline, retry in ${formatSecondsRemaining(pmNextUpdateAt)})`)
+          //   : pmCacheError
+          //     ? yellow(`(tracking ${pmProjects.length} projects in Scryer, cache write failed, updates in ${formatSecondsRemaining(pmNextUpdateAt)})`)
+          //     : green(`(tracking ${pmProjects.length} projects in Scryer, updates in ${formatSecondsRemaining(pmNextUpdateAt)})`);
+          // leftParts.push(" " + (pmUpdating ? yellow("updating Scryer…") : pmStatus));
 
           const left = leftParts.join("");
           // ── Right: model ◆ thinking  ↑in ↓out $cost ────────────────────
