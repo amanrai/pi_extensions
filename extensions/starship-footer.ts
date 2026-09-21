@@ -44,7 +44,7 @@ function formatPwd(cwd: string): string {
 interface PRInfo { number: number; url: string; }
 interface PMProject { id: string; name: string; }
 
-const PM_API_BASE_URL = process.env.PI_PM_API_BASE_URL ?? "http://100.105.192.98:43210";
+const PM_API_BASE_URL = process.env.PI_PM_API_BASE_URL ?? "http://smux-linode:43210";
 const PM_REFRESH_INTERVAL_MS = 30_000;
 const PM_RENDER_TICK_MS = 1_000;
 const PM_CACHE_DIR = join(homedir(), ".pi", "agent", "scryer");

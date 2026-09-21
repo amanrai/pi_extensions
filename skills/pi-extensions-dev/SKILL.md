@@ -5,14 +5,14 @@ description: "Use when maintaining Aman's pi_extensions package: adding extensio
 
 # Pi Extensions Development
 
-Use this skill when modifying `/Users/amanrai/Code/pi_extensions`.
+Use this skill when modifying `/Users/amanrai/Code/common-volume/repos/pi_extensions`.
 
 ## Repo and install model
 
 Local dev repo:
 
 ```text
-/Users/amanrai/Code/pi_extensions
+/Users/amanrai/Code/common-volume/repos/pi_extensions
 ```
 
 Installed Pi package:
@@ -53,7 +53,7 @@ Do not leave uncommitted local changes unless the user explicitly asks.
 ## Standard workflow
 
 ```bash
-cd /Users/amanrai/Code/pi_extensions
+cd /Users/amanrai/Code/common-volume/repos/pi_extensions
 git status --short --branch
 # edit files
 git diff
@@ -112,7 +112,7 @@ Some existing files still import `@mariozechner/*`; be careful when modernizing 
 Temporary run:
 
 ```bash
-pi -e /Users/amanrai/Code/pi_extensions
+pi -e /Users/amanrai/Code/common-volume/repos/pi_extensions
 ```
 
 Installed package update:

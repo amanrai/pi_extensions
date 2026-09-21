@@ -1,5 +1,6 @@
 {
-  "source": "http://100.105.192.98:43210",
+  "source": "http://smux-linode:43210",
+  "source_note": "Endpoint updated after the Linode migration; taxonomy content remains the retained export, not a fresh API snapshot.",
   "project_count": 40,
   "task_statuses": [
     "unopened",

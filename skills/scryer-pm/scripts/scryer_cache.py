@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_BASE_URL = "http://100.105.192.98:43210"
+DEFAULT_BASE_URL = "http://smux-linode:43210"
 CACHE_DIR = Path.home() / ".pi" / "agent" / "scryer"
 PROJECTS_CACHE = CACHE_DIR / "projects.json"
 PROJECT_TASKS_DIR = CACHE_DIR / "projects"

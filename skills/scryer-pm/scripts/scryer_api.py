@@ -23,7 +23,7 @@ try:
 except Exception:  # Keep API helper usable even if cache helper import fails.
     touch_ticket_from_task = None
 
-DEFAULT_BASE_URL = "http://100.105.192.98:43210"
+DEFAULT_BASE_URL = "http://smux-linode:43210"
 
 
 def base_url() -> str:

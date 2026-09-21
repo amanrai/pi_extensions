@@ -2,7 +2,7 @@
 
 Source: `PM System` OpenAPI 3.1.0, version 0.1.0.
 
-Base URL default: `http://100.105.192.98:43210` (override with `SCRYER_API_BASE_URL` or `PI_PM_API_BASE_URL`).
+Base URL default: `http://smux-linode:43210` (override with `SCRYER_API_BASE_URL` or `PI_PM_API_BASE_URL`).
 
 Use this summary first. If exact validation rules are needed, inspect `references/openapi.json`.
 

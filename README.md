@@ -33,7 +33,9 @@ Reload in pi:
 
 ## Notes
 
-The Scryer PM extension defaults to `http://100.105.192.98:43210`. Override with `SCRYER_PM_URL` when needed.
+PM integrations default to `http://smux-linode:43210` over Tailscale. The comms extension accepts `SCRYER_PM_URL`; the footer accepts `PI_PM_API_BASE_URL`; PM skill helpers accept `SCRYER_API_BASE_URL` or `PI_PM_API_BASE_URL` (in that order). Existing overrides still take precedence. If MagicDNS is unavailable on a client, use `http://100.114.138.79:43210` in the applicable override(s).
+
+The canonical local development checkout is `/Users/amanrai/Code/common-volume/repos/pi_extensions`. The installed Pi package remains at `~/.pi/agent/git/github.com/amanrai/pi_extensions`; publish changes and run `pi update git:github.com/amanrai/pi_extensions`, then `/reload` in the active Pi session.
 
 The comms extension defaults to `http://100.105.192.98:43217`. Override with `SCRYER_INTERACTIONS_URL` when needed. Its automatic interaction inference waits 30s by default; override startup default with `SCRYER_COMMS_INFERENCE_DELAY_MS` or current-session delay with `/comms-delay <seconds>`. Its semantic update inference runs in batches every 3 user turns by default; override startup default with `SCRYER_COMMS_UPDATE_BATCH_TURNS` or current-session batch size with `/comms-update-delay <turns>`.
 
