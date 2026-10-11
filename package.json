@@ -8,9 +8,13 @@
   ],
   "license": "MIT",
   "type": "module",
+  "dependencies": {
+    "pi-codex-account": "0.1.1"
+  },
   "pi": {
     "extensions": [
-      "./extensions"
+      "./extensions",
+      "./node_modules/pi-codex-account/src/index.ts"
     ],
     "skills": [
       "./skills"
