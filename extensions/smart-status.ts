@@ -19,6 +19,19 @@ interface ProviderHeaders {
 	headers: Record<string, string>;
 }
 
+interface CodexCredential {
+	access?: unknown;
+	accountId?: unknown;
+}
+
+interface CodexAccountsStore {
+	accounts?: Record<string, { credential?: CodexCredential }>;
+	active?: unknown;
+}
+
+const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+const CODEX_ACCOUNT_STORE_PATH = join(homedir(), ".pi", "agent", "codex-accounts.json");
+
 const interestingHeaderPrefixes = [
 	"x-ratelimit-",
 	"openai-processing-ms",
@@ -93,25 +106,15 @@ function addTotals(a: SessionTotals, b: SessionTotals): SessionTotals {
 	};
 }
 
-async function fetchCodexUsage(): Promise<string | undefined> {
-	let auth: any;
-	try {
-		auth = JSON.parse(await readFile(join(homedir(), ".codex", "auth.json"), "utf8"));
-	} catch {
-		return undefined;
-	}
-
-	const access = auth.tokens?.access_token;
-	if (!access) return undefined;
-
+async function fetchUsageForCodexCredential(access: string, accountId?: string): Promise<string> {
 	const headers: Record<string, string> = {
 		Authorization: `Bearer ${access}`,
-		"User-Agent": "codex-cli",
+		"User-Agent": "pi-smart-status",
 		Accept: "application/json",
 	};
-	if (auth.tokens?.account_id) headers["ChatGPT-Account-Id"] = auth.tokens.account_id;
+	if (accountId) headers["ChatGPT-Account-Id"] = accountId;
 
-	const res = await fetch("https://chatgpt.com/backend-api/wham/usage", { headers });
+	const res = await fetch(CODEX_USAGE_URL, { headers });
 	const text = await res.text();
 	if (!res.ok) return `Codex limits: unavailable (${res.status})`;
 
@@ -154,6 +157,54 @@ async function fetchCodexUsage(): Promise<string | undefined> {
 	}
 
 	return lines.join("\n");
+}
+
+/**
+ * Use pi-codex-account's saved snapshots when they exist. This is deliberately
+ * store-based rather than importing its extension module: the store is its
+ * stable integration boundary and lets smart-status keep working independently.
+ */
+async function fetchSavedCodexAccountUsage(): Promise<string[] | undefined> {
+	let store: CodexAccountsStore;
+	try {
+		store = JSON.parse(await readFile(CODEX_ACCOUNT_STORE_PATH, "utf8"));
+	} catch {
+		return undefined;
+	}
+
+	const accounts = Object.entries(store.accounts ?? {})
+		.filter(([, account]) => typeof account?.credential?.access === "string");
+	if (accounts.length === 0) return undefined;
+
+	const active = typeof store.active === "string" ? store.active : undefined;
+	return Promise.all(accounts.map(async ([label, account]) => {
+		const credential = account.credential!;
+		const access = credential.access as string;
+		const accountId = typeof credential.accountId === "string" ? credential.accountId : undefined;
+		const displayLabel = label === active ? `${label} (active)` : label;
+		try {
+			const usage = await fetchUsageForCodexCredential(access, accountId);
+			return `▸ Codex account  ${displayLabel}\n${usage.split("\n").map((line) => `  ${line}`).join("\n")}`;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return `▸ Codex account  ${displayLabel}\n  Codex limits: failed (${message})`;
+		}
+	}));
+}
+
+/** Legacy fallback for a standalone ~/.codex login. */
+async function fetchCodexUsage(): Promise<string | undefined> {
+	let auth: any;
+	try {
+		auth = JSON.parse(await readFile(join(homedir(), ".codex", "auth.json"), "utf8"));
+	} catch {
+		return undefined;
+	}
+
+	const access = auth.tokens?.access_token;
+	if (typeof access !== "string") return undefined;
+	const accountId = typeof auth.tokens?.account_id === "string" ? auth.tokens.account_id : undefined;
+	return fetchUsageForCodexCredential(access, accountId);
 }
 
 function formatProviderHeaders(latest?: ProviderHeaders): string | undefined {
@@ -224,9 +275,10 @@ export default function (pi: ExtensionAPI) {
 			const provider = model?.provider?.toLowerCase();
 			if (provider === "openai" || provider?.includes("openai")) {
 				try {
-					const codexUsage = await fetchCodexUsage();
+					const savedAccountUsage = await fetchSavedCodexAccountUsage();
+					const codexUsage = savedAccountUsage?.join("\n\n") ?? await fetchCodexUsage();
 					if (codexUsage) lines.push("", codexUsage);
-					else lines.push("", "OpenAI/Codex limits: no ~/.codex ChatGPT auth found");
+					else lines.push("", "OpenAI/Codex limits: no saved Codex accounts or ~/.codex ChatGPT auth found");
 				} catch (err) {
 					lines.push("", `OpenAI/Codex limits: failed (${err instanceof Error ? err.message : String(err)})`);
 				}
