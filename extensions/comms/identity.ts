@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { randomInt, randomUUID } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { open, readFile, rename, unlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
@@ -45,7 +45,7 @@ const adjectiveWords = adjectives.filter((word) => /^[a-z]+$/.test(word));
 const nounWords = nouns.filter((word) => /^[a-z]+$/.test(word));
 
 export function generateIdentityName() {
-  return `${adjectiveWords[randomInt(adjectiveWords.length)]}_${nounWords[randomInt(nounWords.length)]}`;
+  return `${adjectiveWords[randomInt(adjectiveWords.length)]}_${nounWords[randomInt(nounWords.length)]}_${randomBytes(2).toString("hex")}`;
 }
 
 /** Attach only the sender's name; never send the folder's identity lists. */

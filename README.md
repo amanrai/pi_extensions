@@ -14,12 +14,12 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 
 ## Folder identity startup
 
-`comms` initializes `.scryer` in the exact folder where Pi starts, independently of parent folders. It reuses the sole `created_by` identity, or generates an `adjective_noun` name from bundled word lists. Keep `.scryer` checked into Git.
+`comms` initializes `.scryer` in the exact folder where Pi starts, independently of parent folders. It reuses the sole `created_by` identity, or generates an `adjective_noun_<4 random hex characters>` name from bundled word lists and cryptographic random bytes. Keep `.scryer` checked into Git. Existing names are not renamed.
 
 ```json
 {
   "created_by": [{
-    "name": "quiet_badger",
+    "name": "quiet_badger_a7c9",
     "machine_name": "creator-machine",
     "tailnet_name": "creator-tailnet",
     "repo": "https://github.com/example/repo.git",
@@ -34,7 +34,7 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 
 Machine, tailnet, and repo fields are optional. `tailnet_name` is the creator machine's Tailscale DNS name without the trailing dot (falling back to its Tailscale host name), not the logged-in account or network name. Machine and tailnet record the creator's environment and are not replaced by later sessions. Repo detection uses the origin URL, or the local Git root if no origin exists; a later startup refreshes it when available. Creation time and session remain unchanged.
 
-Every update sends the startup name in `metadata.v2meta.identity`, including discussion-only and test updates. Existing metadata is preserved; full `.scryer` records and the old `identities` list are not sent. Updates require successful startup identity initialization. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
+Every update sends the full startup name, including its suffix, in `metadata.v2meta.identity`, including discussion-only and test updates. Only the Starship footer hides the four-character suffix. Existing metadata is preserved; full `.scryer` records and the old `identities` list are not sent. Updates require successful startup identity initialization. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
 
 `.scryer` keeps action history separately. Action entries contain `name` and a `touched_at` list of UTC hours such as `2026-10-15T02Z`; old name-only entries remain readable. Startup does not add action entries. Automatic `.scryer` action-list maintenance is not implemented yet.
 
@@ -44,7 +44,7 @@ Every update includes `metadata.v2meta.foldersTouched`, for example:
 
 ```json
 {
-  "identity": "quiet_badger",
+  "identity": "quiet_badger_a7c9",
   "foldersTouched": ["thinkpad.tailnet.ts.net:/home/amanrai/Code/project/src"]
 }
 ```

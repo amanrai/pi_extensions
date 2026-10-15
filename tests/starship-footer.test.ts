@@ -54,6 +54,20 @@ test("footer shows startup identity@folder and safely falls back to folder only"
   await invoke("session_start");
   assert.equal(plain(footer.render(120)[0]), "calm_otter@~/workspace");
   await invoke("session_shutdown");
+  for (const [name, display] of [
+    ["quiet_badger_a7c9", "quiet_badger"],
+    ["eager_elk_0000", "eager_elk"],
+    ["quiet_cafe", "quiet_cafe"], // A legacy noun that looks hexadecimal is not a suffix.
+    ["quiet_badger_zzzz", "quiet_badger_zzzz"],
+    ["quiet_badger_a7c90", "quiet_badger_a7c90"],
+  ]) {
+    const contents = JSON.stringify({ created_by: [{ name }] });
+    await writeFile(join(cwd, ".scryer"), contents);
+    await invoke("session_start");
+    assert.equal(plain(footer.render(120)[0]), `${display}@~/workspace`);
+    assert.equal(await readFile(join(cwd, ".scryer"), "utf8"), contents);
+    await invoke("session_shutdown");
+  }
   for (const contents of ["invalid JSON", '{"created_by":[{"name":42}]}', '{"command_runner":["not_the_creator"]}']) {
     await writeFile(join(cwd, ".scryer"), contents);
     await invoke("session_start");
