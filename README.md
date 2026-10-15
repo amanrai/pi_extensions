@@ -6,11 +6,40 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 
 - `scryer/` — Scryer PM context, project/ticket selection (`/pp <project_id>`, `/tp <ticket_id>` with picker fallback), `/save`, `/update`, `/deets`, and recorder autosave.
 - `comms/` — Scryer interaction-service producer/consumer: emits producer markers, polls interaction requests/responses, and renders cockpit-style TUI prompts.
+- `matrix-screensaver/` — optional native Matrix rain after one minute idle; always starts disabled. Enable with `/matrix on`, stop with `/matrix off`.
 - `read-md.ts` — `/read [path]` and `ctrl+k` Markdown picker/viewer for human reading, no LM context injection.
 - `smart-status.ts` — `/status` command with model/context/session usage and Codex quota bars.
 - `switch-to.ts` — `/switchTo` command to pick a session for the current folder and resume from a tree point.
 - `starship-footer.ts` — Starship-powered footer with `agent_name@folder` from the startup `.scryer`, PR link, model, thinking level, tokens, and Codex subscription-aware cost display.
 - `pi-codex-account` — bundled third-party `/codex` account-profile commands for saving, switching, and checking usage of named OpenAI Codex logins.
+
+## Matrix idle screensaver
+
+- **Always starts disabled**, including startup, `/reload`, `/new`, `/resume`, and
+  `/fork`. Nothing is persisted or enabled automatically in other windows.
+- `/matrix on` enables the screensaver for the current Pi session. `/matrix off`
+  immediately stops it; `/matrix` or `/matrix status` reports its current state.
+- Disabled means no idle/animation timers, controller widget, input subscription,
+  or screen writes from this extension—persistent PTY terminals remain quiet.
+- When enabled, **60 seconds of complete inactivity** starts green Matrix rain.
+  User input, model/message streaming, and tool activity reset the clock. Active
+  agent runs (including retries), queued messages, editor drafts, compaction, and
+  extension dialogs prevent display. Existing overlays are not covered.
+- Any wake-up key (including Enter/Ctrl+C or a pasted chunk) dismisses the animation
+  **without sending it to the editor or model**; subsequent typing works normally.
+  Terminal capability/cell-size replies are passed back to Pi, not treated as keys.
+  Resumed work or another focused dialog closes only the screensaver's own overlay.
+- Native Pi overlays use ASCII glyphs and standard ANSI colors at about 12 FPS;
+  both regular and fullscreen renderers resize normally. No `cmatrix` installation,
+  subprocess, external package, model call, network request, or platform-specific
+  command is needed on **macOS or Linux**. It is a visual overlay, not a screen lock.
+- Non-interactive/JSON/RPC modes do not start it. Turning it off, exiting, reloading,
+  or switching sessions removes its overlay and cancels its timers/listener.
+  Background comms polling and recap/update delivery continue independently.
+
+Tests include deterministic idle timing, opt-in/reset behavior, animation sizing,
+input consumption, and both real Pi TUI backends with an in-memory terminal.
+Validated on Linux; a native macOS terminal visual check is still outstanding.
 
 ## Folder identity startup
 
