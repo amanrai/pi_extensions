@@ -12,6 +12,7 @@ export type FolderTouch = {
   summary: string;
   folders: string[];
   createdAt: string;
+  codeChanged?: boolean;
 };
 
 export async function observeFolderTouch(
@@ -19,6 +20,7 @@ export async function observeFolderTouch(
   input: Record<string, unknown>,
   isError: boolean,
   cwd: string,
+  codeChanged = false,
 ): Promise<FolderTouch | undefined> {
   if (isError) return undefined;
   let folders: string[] = [];
@@ -32,7 +34,7 @@ export async function observeFolderTouch(
     summary = input.command;
   }
   if (!folders.length) return undefined;
-  return { id: randomUUID(), tool, summary: summary.slice(0, 800), folders, createdAt: new Date().toISOString() };
+  return { id: randomUUID(), tool, summary: summary.slice(0, 800), folders, createdAt: new Date().toISOString(), codeChanged };
 }
 
 /** Branch-local custom entries survive reload/resume without replaying sent touches. */
@@ -59,6 +61,7 @@ export function selectUpdateFolders(touches: readonly FolderTouch[], ids: unknow
   const selected = touches.filter((touch) => requested.has(touch.id));
   return {
     touchIds: selected.map((touch) => touch.id),
+    codeChanged: selected.some((touch) => touch.codeChanged === true),
     foldersTouched: [...new Set(selected.flatMap((touch) => touch.folders.map((folder) => `${machineName}:${folder}`)))].sort(),
   };
 }

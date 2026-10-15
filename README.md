@@ -61,19 +61,60 @@ Every startup/reload/resume registers with `POST /api/identities` at the interac
 
 ## Coding notes
 
-During coding, `comms` inference records changes at logical milestones (implementation,
-review, debugging, tests/builds, commits and pushes). It classifies these updates with
-`coding: true`, including read-only reviews or test results with no touched folders.
-Updates with selected file/command touch observations are also treated as coding notes
-if the model omits the flag. Unrelated non-coding updates remain plain.
+`<coding>...</coding>` is reserved for updates describing actual code changes.
+A model's `coding: true` is not sufficient: the update must select an observation
+with `codeChanged: true`. Successful no-ops, existing dirty files, planning,
+discussion, read-only reviews, test/build runs, commits/pushes without another code
+change, and recaps do not qualify. An explicit `coding: false` remains plain.
 
-Before delivery, coding-note bodies are wrapped in `<coding>...</coding>`. Existing
-wrappers are not doubled, and truncation reserves room for both tags within the
-1,200-character body limit. The same body is sent to the append-only update log and
-the existing session-task mirror; titles and metadata are unchanged. The inference
-prompt also requires requested notes to contain the note itself, and revisions to
-produce new updates rather than rewriting history. Existing batch/flush timing is
-unchanged.
+Before/after byte fingerprints provide evidence for recognized source/script files
+(including tests) changed by `edit`/`write`, and by allowlisted Bash mutations inside
+Git repos. Markdown, `.scryer`, and other non-code files do not supply coding evidence.
+This is conservative observation, not filesystem auditing: unsupported commands,
+ignored files, files over 2 MiB, and Bash scopes with over 2,000 files may be missed.
+Concurrent writes are not policed or attributed with ownership locks.
+
+Existing outer wrappers are stripped before applying the evidence-based flag, so a
+model cannot bypass the gate by adding tags itself. Ordinary updates retain their
+1,200-character body limit, reserving room for both tags when applicable. The same
+body reaches the append-only update log and session-task mirror. Requested notes
+must contain the note itself; revisions produce new updates, never rewrite history.
+
+## Idle flush and recaps
+
+- After **30 seconds without user/model/tool activity**, pending ordinary semantic
+  updates are flushed independently of whether interaction inference proposes a
+  prompt. The ordinary three-user-turn batching still applies while working.
+- After **30 minutes idle**, an update titled **`Idle Recap — …`** covers the **full
+  rolling last 12 hours**, not just the delta since the previous recap. Titles of
+  multipart recaps all begin `Idle Recap`; bodies are always untagged.
+- History belongs to **this running Pi window**, scoped to the current machine and
+  local Git root (or startup folder when no repo exists). It spans `/new`, `/resume`,
+  `/fork`, and `/reload`, but never imports saved history from another window or
+  aggregates by persistent identity. Capture begins when this version is enabled;
+  quitting Pi ends that window's history. Only the last 12 hours remain in memory.
+- A recap requires new meaningful work/discussion since the last verified manual or
+  automatic recap. No work, expired work, greetings, and logging/recap acknowledgments
+  do not produce another recap. If new work exists, previously recapped work still
+  appears when it is inside the 12-hour range.
+- Terminal input, message streaming, model requests, and tools reset the idle clock.
+  Active agent runs, queued messages, and editor drafts prevent idle jobs. Background
+  comms polling, registration, update posting, and recap generation are not activity.
+  Resumed activity cancels automatic recap generation; shutdown cancels timers/work.
+- Long source histories are processed in bounded segments rather than silently
+  dropping older context. Recap bodies bypass the ordinary update truncation limit.
+  Every part is read back in full, including metadata, before acknowledgment.
+  Partial deliveries retain stable IDs and verified receipts across reload/session
+  switches, retrying after transient failures without creating duplicate update rows.
+  No checkpoint advances until every part is verified. PM mirroring remains best-effort.
+- Use the model-callable **`send_recap`** tool for requested manual recaps, supplying
+  `title` and complete `parts: string[]`. It performs the same untagged, full-storage
+  verification and advances this window/repo's shared recap checkpoint. Direct HTTP
+  writes bypass this local checkpoint; use the tool instead.
+
+The two idle jobs are terminal-UI behavior. Ordinary semantic batching and manual
+recap delivery remain available in non-interactive modes. Interaction inference is
+still separate; `/comms-delay` changes its delay, not either idle timer.
 
 ## Folders in updates
 

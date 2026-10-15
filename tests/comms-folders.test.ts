@@ -102,11 +102,11 @@ const touches: FolderTouch[] = [
 
 test("each update references only its own observed folders, qualified on this machine", () => {
   assert.deepEqual(selectUpdateFolders(touches, ["one", "invented"], "current.tailnet.ts.net"), {
-    touchIds: ["one"], foldersTouched: ["current.tailnet.ts.net:/repo/first"],
+    touchIds: ["one"], foldersTouched: ["current.tailnet.ts.net:/repo/first"], codeChanged: false,
   });
   assert.deepEqual(selectUpdateFolders(touches, ["two", "one", "one"], "machine").foldersTouched, ["machine:/repo/first", "machine:/repo/second"]);
-  assert.deepEqual(selectUpdateFolders(touches, [], "machine"), { touchIds: [], foldersTouched: [] });
-  assert.deepEqual(selectUpdateFolders(touches, undefined, "machine"), { touchIds: [], foldersTouched: [] });
+  assert.deepEqual(selectUpdateFolders(touches, [], "machine"), { touchIds: [], foldersTouched: [], codeChanged: false });
+  assert.deepEqual(selectUpdateFolders(touches, undefined, "machine"), { touchIds: [], foldersTouched: [], codeChanged: false });
 });
 
 test("pending observations survive reloads, while sent ones and abandoned branches do not replay", () => {

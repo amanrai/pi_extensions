@@ -37,6 +37,14 @@ export function normalizeGitRepo(remote: string | undefined): string | undefined
   return `git@${host}/${path}`;
 }
 
+/** A machine-local grouping key for this window's recap, including local-only repos. */
+export async function localRepoRoot(directory: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: directory, timeout: 2000 });
+    return stdout.trim() || directory;
+  } catch { return directory; }
+}
+
 /** No origin (including a newly initialized repo) means no portable repo key yet. */
 export async function detectGitRepo(directory: string): Promise<string | undefined> {
   try {

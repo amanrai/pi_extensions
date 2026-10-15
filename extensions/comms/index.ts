@@ -6,9 +6,14 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { homedir, hostname } from "node:os";
 import { Type } from "typebox";
+import { isDeepStrictEqual } from "node:util";
+import { beforeCodeChange, afterCodeChange, type ChangeSnapshot } from "./changes.ts";
+import { windowActivity, idleTimers, type WindowActivity, type RecapDelivery, type RecapSender } from "./activity.ts";
+import { localRepoRoot } from "./repository.ts";
+import { RECAP_SYSTEM_PROMPT, prepareIdleRecap, prepareManualRecap, deliverRecap } from "./recaps.ts";
 import { detectRuntimeMachineName, initializeStartupIdentity, refreshStartupRepo, updateIdentityMetadata, type StartupIdentity } from "./identity.ts";
 import { startIdentityRegistration } from "./registration.ts";
-import { formatUpdateBody } from "./updates.ts";
+import { formatUpdateBody, extractJson } from "./updates.ts";
 import { FOLDER_TOUCH, FOLDER_TOUCHES_SENT, observeFolderTouch, pendingFolderTouches, selectUpdateFolders, type FolderTouch } from "./folders.ts";
 
 type InteractionChoice = { id: string; label: string; send?: string; custom?: boolean };
@@ -89,6 +94,30 @@ let lastUpdateHash = "";
 let appendSentTouches: (updateId: string, touchIds: string[]) => void;
 const discoveredFrom = new Set<string>();
 const processedResponses = new Set<string>();
+let activity: WindowActivity | undefined;
+let recapScope = "";
+let recapRepo = "";
+let activeSession = "";
+let idle: ReturnType<typeof idleTimers> | undefined;
+let lifetime = new AbortController();
+let recapAbort: AbortController | undefined;
+let agentBusy = false;
+const changeSnapshots = new Map<string, ChangeSnapshot | undefined>();
+
+function userActivity() {
+  activity?.touch();
+  recapAbort?.abort();
+  idle?.reset();
+}
+
+function recordActivity(role: string, text: string) {
+  activity?.record(recapScope, activeSession, role, text);
+  userActivity();
+}
+
+function canRunIdle(ctx: ExtensionContext) {
+  return !agentBusy && !editorHasDraft(ctx) && ctx.isIdle() && !ctx.hasPendingMessages();
+}
 
 const RESET = "\x1b[0m";
 const BG = "\x1b[48;2;0;0;0m";
@@ -174,13 +203,13 @@ function emitMarker(pi: ExtensionAPI, ctx: ExtensionContext) {
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${SERVICE_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
+  const res = await fetch(`${SERVICE_URL}${path}`, { ...init, signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(init?.signal ? [init.signal] : [])]), headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return await res.json() as T;
 }
 
 async function pmApi<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${PM_URL}${path}`, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
+  const res = await fetch(`${PM_URL}${path}`, { ...init, signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(init?.signal ? [init.signal] : [])]), headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) } });
   const text = await res.text();
   if (!res.ok) throw new Error(`PM API ${res.status}: ${text}`);
   return (text ? JSON.parse(text) : undefined) as T;
@@ -240,15 +269,6 @@ function updateHash(update: Pick<SessionUpdate, "kind" | "title" | "body" | "lev
   return createHash("sha1")
     .update(`${update.kind}\n${update.level ?? ""}\n${update.title.trim().toLowerCase()}\n${update.body.trim().toLowerCase()}`)
     .digest("hex");
-}
-
-function extractJson(text: string) {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
-  const raw = fenced?.[1] ?? text;
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end < start) throw new Error("no JSON object in inference response");
-  return JSON.parse(raw.slice(start, end + 1));
 }
 
 function normalizeChoices(choices: any[]): InteractionChoice[] {
@@ -371,6 +391,10 @@ async function pollResponses(pi: ExtensionAPI, ctx: ExtensionContext) {
 }
 
 function stopTimers() {
+  lifetime.abort();
+  recapAbort?.abort();
+  idle?.stop();
+  idle = undefined;
   identityRegistration?.stop();
   identityRegistration = undefined;
   if (consumerTimer) clearInterval(consumerTimer);
@@ -383,6 +407,10 @@ function stopTimers() {
 
 async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   stopTimers();
+  cancelPendingInference("session-start");
+  lifetime = new AbortController();
+  agentBusy = false;
+  changeSnapshots.clear();
   currentCtx = ctx;
   producerFrom = await ensureProducerFrom(ctx);
   startupIdentity = undefined;
@@ -396,8 +424,14 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
     ctx.ui.notify(`Scryer identity initialization failed: ${error}`, "error");
     await logInference({ event: "identity-startup-error", error });
   }
+  activeSession = await sessionKey(ctx);
+  activity = windowActivity(ctx.sessionManager);
+  recapRepo = await localRepoRoot(ctx.cwd);
+  recapScope = `${machineName}:${recapRepo}`;
+  activity.touch();
   semanticUpdateCursor = ctx.sessionManager.getBranch().length;
   semanticUpdateRunning = false;
+  semanticUpdatePromise = undefined;
   publishCommsStatus();
   // Do not replay old responses after reload/resume. Comms responses are edge-triggered.
   lastResponseSince = new Date().toISOString();
@@ -415,9 +449,17 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   consumerTimer = setInterval(() => { if (currentCtx) pollActiveRequests(currentCtx).catch(() => {}); }, 1200);
   responseTimer = setInterval(() => { if (currentCtx) pollResponses(pi, currentCtx).catch(() => {}); }, 1200);
   if (ctx.hasUI && ctx.mode === "tui") {
+    idle = idleTimers({
+      activity, canRun: () => canRunIdle(ctx),
+      flush: () => forceSemanticUpdateFlush(ctx),
+      recap: () => runIdleRecap(ctx),
+      onError: (kind, error: any) => { void logInference({ event: `idle-${kind}-error`, error: error?.message ?? String(error) }); },
+    });
     terminalInputUnsubscribe = ctx.ui.onTerminalInput(() => {
+      userActivity();
       if (pendingInference) cancelPendingInference("terminal-input");
     });
+    idle.reset();
   }
 }
 
@@ -493,8 +535,8 @@ async function findSessionTaskType(projectId: string) {
   return preferred.id;
 }
 
-async function ensureSessionTask(ctx: ExtensionContext) {
-  const key = await sessionKey(ctx);
+async function ensureSessionTask(ctx: ExtensionContext, target?: RecapSender["task"]) {
+  const key = target?.key ?? await sessionKey(ctx);
   const state = await readState();
   const existingId = state.sessionTaskBySession?.[key];
   if (existingId) return existingId;
@@ -504,11 +546,11 @@ async function ensureSessionTask(ctx: ExtensionContext) {
   const task = await pmApi<PmTask>("/api/tasks", {
     method: "POST",
     body: JSON.stringify({
-      title: sessionTaskTitle(ctx),
+      title: target?.title ?? sessionTaskTitle(ctx),
       project_id: project.id,
       task_type_id: taskTypeId,
       status: "in_execution",
-      description_md: initialSessionDescription(ctx, key),
+      description_md: target?.description ?? initialSessionDescription(ctx, key),
       tag_names: ["pi"],
       created_by_role: "pi",
       created_by_instance_key: "comms",
@@ -543,8 +585,8 @@ function appendUpdateToDescription(description: string | undefined, update: Sess
   return `${base}\n\n## Updates\n\n${start}\n${entry}\n\n${end}`;
 }
 
-async function appendSessionTaskUpdate(ctx: ExtensionContext, update: SessionUpdate) {
-  const taskId = await ensureSessionTask(ctx);
+async function appendSessionTaskUpdate(ctx: ExtensionContext, update: SessionUpdate, target?: RecapSender["task"]) {
+  const taskId = await ensureSessionTask(ctx, target);
   const task = await pmApi<PmTask>(`/api/tasks/${encodeURIComponent(taskId)}`);
   const description_md = appendUpdateToDescription(task.description_md, update);
   if (description_md === task.description_md) return;
@@ -555,14 +597,16 @@ async function appendSessionTaskUpdate(ctx: ExtensionContext, update: SessionUpd
   await logInference({ event: "session-task-updated", taskId, updateId: update.id, kind: update.kind });
 }
 
-async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext; foldersTouched?: string[]; coding?: boolean } = {}) {
-  if (!producerFrom) throw new Error("comms not initialized");
-  if (!startupIdentity) throw new Error("Scryer startup identity is required for updates");
-  const metadata = updateIdentityMetadata(update.metadata, startupIdentity.name, options.foldersTouched);
+async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext; foldersTouched?: string[]; coding?: boolean; id?: string; fullBody?: boolean; verify?: boolean; signal?: AbortSignal; sender?: RecapSender; createdAt?: string } = {}) {
+  if (!producerFrom && !options.sender) throw new Error("comms not initialized");
+  if (!startupIdentity && !options.sender) throw new Error("Scryer startup identity is required for updates");
+  const from = options.sender?.from ?? producerFrom!;
+  const ctx = options.ctx ?? currentCtx;
+  const metadata = updateIdentityMetadata(update.metadata, options.sender?.identity ?? startupIdentity!.name, options.foldersTouched);
   const normalized = {
     kind: update.kind,
     title: update.title.trim().slice(0, 140),
-    body: formatUpdateBody(update.body, options.coding),
+    body: formatUpdateBody(update.body, options.coding, options.fullBody ? Infinity : undefined),
     level: update.level,
   };
   if (!normalized.title || !normalized.body) throw new Error("update title and body required");
@@ -570,20 +614,88 @@ async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "
   const important = update.kind === "blocked" || update.kind === "error" || update.kind === "done" || update.kind === "waiting";
   if (!options.force && hash === lastUpdateHash) return undefined;
   if (!options.force && !important && Date.now() - lastUpdatePostAt < 45_000) return undefined;
-  const id = randomUUID();
-  const createdAt = new Date().toISOString();
-  await api("/api/updates", {
-    method: "POST",
-    body: JSON.stringify({ id, from: producerFrom, ...normalized, metadata, createdAt }),
-  });
+  const id = options.id ?? randomUUID();
+  const createdAt = options.createdAt ?? new Date().toISOString();
+  const payload = { id, from, ...normalized, metadata, createdAt };
+  options.signal?.throwIfAborted();
+  try {
+    await api("/api/updates", { method: "POST", body: JSON.stringify(payload), signal: options.signal ?? AbortSignal.timeout(10_000) });
+  } catch (error) {
+    // A retry may encounter an already-stored part after a lost acknowledgment.
+    if (!options.verify || options.signal?.aborted) throw error;
+    await verifyStoredUpdate(payload, options.signal);
+  }
+  if (options.verify) await verifyStoredUpdate(payload, options.signal);
+  options.signal?.throwIfAborted();
   lastUpdatePostAt = Date.now();
   lastUpdateHash = hash;
-  const ctx = options.ctx ?? currentCtx;
   if (ctx) {
-    await appendSessionTaskUpdate(ctx, { id, from: producerFrom, ...normalized, metadata, createdAt })
+    await appendSessionTaskUpdate(ctx, payload, options.sender?.task)
       .catch((err) => logInference({ event: "session-task-error", updateId: id, error: err?.message ?? String(err) }));
   }
+  options.signal?.throwIfAborted();
   return id;
+}
+
+async function verifyStoredUpdate(update: SessionUpdate, signal?: AbortSignal) {
+  const data = await api<{ updates: SessionUpdate[] }>(`/api/updates?from=${encodeURIComponent(update.from)}&limit=500`, { signal: signal ?? AbortSignal.timeout(10_000) });
+  const stored = data.updates.find((row) => row.id === update.id);
+  if (!stored || stored.from !== update.from || stored.title !== update.title || stored.body !== update.body ||
+    stored.kind !== update.kind || stored.level !== update.level || stored.createdAt !== update.createdAt ||
+    !isDeepStrictEqual(stored.metadata, update.metadata)) {
+    throw new Error(`Full recap readback failed: ${update.id}`);
+  }
+}
+
+async function sendRecap(ctx: ExtensionContext, history: WindowActivity, delivery: RecapDelivery, signal: AbortSignal) {
+  if (!producerFrom || !startupIdentity) throw new Error("Scryer startup identity is required for recaps");
+  const sender = delivery.sender ??= { from: producerFrom, identity: startupIdentity.name, machine: machineName, repo: recapRepo,
+    task: { key: activeSession, title: sessionTaskTitle(ctx), description: initialSessionDescription(ctx, activeSession) } };
+  const { machine, repo } = sender;
+  await deliverRecap(history, delivery, async (part, index) => {
+    signal.throwIfAborted();
+    part.createdAt ??= new Date().toISOString();
+    await createSessionUpdate({
+      kind: "progress", title: part.title, body: part.body, level: "info",
+      metadata: { source: delivery.source, recapId: delivery.id, part: index + 1, parts: delivery.parts.length,
+        windowId: history.id, machine, repo, rangeStart: new Date(delivery.start).toISOString(),
+        rangeEnd: new Date(delivery.end).toISOString(), throughSequence: delivery.through },
+    }, { force: true, ctx, id: part.id, fullBody: true, verify: true, coding: false, signal, sender, createdAt: part.createdAt });
+  });
+  await logInference({ event: "recap-delivered", recapId: delivery.id, source: delivery.source, parts: delivery.parts.length, through: delivery.through });
+}
+
+async function runIdleRecap(ctx: ExtensionContext) {
+  if (!activity || !ctx.model || !canRunIdle(ctx)) return;
+  const history = activity;
+  const scope = recapScope;
+  const repo = recapRepo;
+  const machine = machineName;
+  const model = ctx.model;
+  const registry = ctx.modelRegistry;
+  const signal = AbortSignal.any([lifetime.signal, (recapAbort = new AbortController()).signal, AbortSignal.timeout(10 * 60_000)]);
+  // If an interrupted delivery finishes first, recap any newer work too.
+  for (let pass = 0; pass < 2; pass++) {
+    const delivery = await prepareIdleRecap({
+      activity: history, scope, repo, machine, label: basename(repo),
+      chunkLimit: Math.max(512, Math.min(16_000, Math.floor(((model.contextWindow ?? 32_000) - 2048) / 4))),
+      generate: async (input) => {
+        signal.throwIfAborted();
+        const auth = await registry.getApiKeyAndHeaders(model);
+        if (!auth.ok || !auth.apiKey) throw new Error(auth.ok ? `No API key for ${model.provider}` : auth.error);
+        const result = await complete(model, { systemPrompt: RECAP_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: [{ type: "text", text: JSON.stringify(input) }], timestamp: Date.now() }] },
+          { apiKey: auth.apiKey, headers: auth.headers, signal,
+            maxTokens: Math.min(model.maxTokens ?? 8192, 8192, Math.max(256, Math.floor((model.contextWindow ?? 32_000) / 3))) });
+        signal.throwIfAborted();
+        if (result.stopReason !== "stop") throw new Error(`Incomplete recap: ${result.stopReason}`);
+        return extractJson(textFromMessage(result));
+      },
+    });
+    signal.throwIfAborted();
+    if (!delivery) return;
+    await sendRecap(ctx, history, delivery, signal);
+  }
 }
 
 async function recentUpdates(limit = 5) {
@@ -636,7 +748,7 @@ Rules:
 - Use the tool, summary, folders, and createdAt of each observation to match it to the update. Separate unrelated work into separate updates. Do not attach the entire session's folders to every update.
 - Emit zero or more updates; use separate updates for separate decisions, actions, commits, pushes, blockers, or completions.
 - Create updates when something meaningful changed since the previous updates; err on the side of logging useful micro-context.
-- While coding, record changes at logical milestones: implementation, review, debugging, testing, builds, commits, and pushes. Set coding: true for these notes, even when no files changed; use coding: false for unrelated non-coding updates. Return plain body text; the extension adds the coding tags.
+- Set coding: true ONLY when this specific update describes an actual code change and references an observed touch with codeChanged: true. Discussion, planning, read-only reviews, test/build runs, commits/pushes without a new code change, and recaps are NOT coding notes. Set coding: false for those. Return plain body text; the extension enforces the evidence requirement and adds/removes coding tags.
 - A request to make a note requires an update containing the note itself, not just a report that a local notes file was written. Revisions to notes require new updates; previous updates are never rewritten.
 - Optimize for decision logging: record decisions made, why they were made, alternatives rejected, assumptions introduced, and follow-up implied by the decision.
 - Also record current progress, blockers, waiting states, errors, or completion when useful.
@@ -697,7 +809,7 @@ function userTurnCount(messages: ConversationMessage[]) {
   return messages.filter((message) => message.role === "user").length;
 }
 
-async function runUpdateInference(ctx: ExtensionContext, token: number, messages: ConversationMessage[], folderTouches: FolderTouch[]) {
+async function runUpdateInference(ctx: ExtensionContext, token: number, messages: ConversationMessage[], folderTouches: FolderTouch[], signal: AbortSignal) {
   if (!ctx.model) return;
   const previousUpdates = await recentUpdates(5).catch(() => []);
   const input = { messages, previousUpdates, folderTouches };
@@ -709,7 +821,9 @@ async function runUpdateInference(ctx: ExtensionContext, token: number, messages
     content: [{ type: "text", text: JSON.stringify(input, null, 2) }],
     timestamp: Date.now(),
   };
-  const result = await complete(ctx.model, { systemPrompt: UPDATE_SYSTEM_PROMPT, messages: [userMessage] }, { apiKey: auth.apiKey, headers: auth.headers });
+  signal.throwIfAborted();
+  const result = await complete(ctx.model, { systemPrompt: UPDATE_SYSTEM_PROMPT, messages: [userMessage] }, { apiKey: auth.apiKey, headers: auth.headers, signal });
+  signal.throwIfAborted();
   const text = result.content.filter((part): part is { type: "text"; text: string } => part.type === "text").map((part) => part.text).join("\n");
   const parsed = extractJson(text);
   await logInference({ event: "update-response", token, stopReason: result.stopReason, raw: text, parsed });
@@ -718,6 +832,7 @@ async function runUpdateInference(ctx: ExtensionContext, token: number, messages
   for (const update of updates) {
     const kind = ["progress", "decision", "blocked", "waiting", "done", "error"].includes(update?.kind) ? update.kind : "progress";
     const level = ["info", "success", "warning", "error"].includes(update?.level) ? update.level : kind === "error" ? "error" : kind === "blocked" || kind === "waiting" ? "warning" : kind === "done" ? "success" : "info";
+    signal.throwIfAborted();
     const selected = selectUpdateFolders(folderTouches, update?.touchIds, machineName);
     const id = await createSessionUpdate({
       kind,
@@ -725,7 +840,7 @@ async function runUpdateInference(ctx: ExtensionContext, token: number, messages
       body: String(update?.body ?? "The agent made progress."),
       level,
       metadata: { source: "secondary-agent", token, batch: true },
-    }, { force: true, ctx, foldersTouched: selected.foldersTouched, coding: typeof update?.coding === "boolean" ? update.coding : selected.touchIds.length > 0 });
+    }, { force: true, ctx, foldersTouched: selected.foldersTouched, coding: update?.coding !== false && selected.codeChanged, signal });
     if (id) {
       created += 1;
       if (selected.touchIds.length) appendSentTouches(id, selected.touchIds);
@@ -778,16 +893,21 @@ function publishCommsStatus() {
 function startUpdateBatch(ctx: ExtensionContext, messages: ConversationMessage[], reason: string) {
   const branch = ctx.sessionManager.getBranch();
   const folderTouches = pendingFolderTouches(branch);
-  semanticUpdateCursor = branch.length;
+  const end = branch.length;
+  const signal = lifetime.signal;
   const token = ++updateInferenceToken;
   semanticUpdateRunning = true;
-  semanticUpdatePromise = runUpdateInference(ctx, token, messages, folderTouches)
-    .catch((err) => logInference({ event: "update-error", token, reason, error: err?.message ?? String(err) }))
+  let succeeded = false;
+  semanticUpdatePromise = runUpdateInference(ctx, token, messages, folderTouches, signal)
+    .then(() => { if (!signal.aborted) { semanticUpdateCursor = end; succeeded = true; } })
     .finally(() => {
+      if (signal.aborted) return;
       semanticUpdateRunning = false;
       semanticUpdatePromise = undefined;
-      if (currentCtx && reason !== "forced-interaction") maybeRunUpdateBatch(currentCtx);
+      if (succeeded && currentCtx && reason === "batch") maybeRunUpdateBatch(currentCtx);
     });
+  // Keep failures retryable: neither the conversation cursor nor sent markers advance.
+  void semanticUpdatePromise.catch((err) => logInference({ event: "update-error", token, reason, error: err?.message ?? String(err) }));
   return semanticUpdatePromise;
 }
 
@@ -796,20 +916,38 @@ function maybeRunUpdateBatch(ctx: ExtensionContext) {
   const branch = ctx.sessionManager.getBranch();
   const messages = conversationMessages(ctx, semanticUpdateCursor, branch.length);
   if (userTurnCount(messages) < updateBatchTurns) return;
-  void startUpdateBatch(ctx, messages, "batch");
+  void startUpdateBatch(ctx, messages, "batch").catch(() => {});
 }
 
 async function forceSemanticUpdateFlush(ctx: ExtensionContext) {
   while (semanticUpdatePromise) await semanticUpdatePromise.catch(() => undefined);
   const branch = ctx.sessionManager.getBranch();
   const messages = conversationMessages(ctx, semanticUpdateCursor, branch.length);
-  if (!messages.length) return;
+  if (!messages.length && !pendingFolderTouches(branch).length) return;
   await logInference({ event: "forced-update-flush", messages: messages.length, userTurns: userTurnCount(messages) });
   await startUpdateBatch(ctx, messages, "forced-interaction");
 }
 
 export default function (pi: ExtensionAPI) {
   publishCommsStatus();
+  pi.registerTool({
+    name: "send_recap",
+    label: "Send Recap",
+    description: "Send a user-requested recap as append-only comms updates. Supply the complete detailed notes, split into parts as needed. Preserves and verifies full bodies, uses no coding tags, and resets this window/repo's manual/idle recap checkpoint only after every part is stored intact. Use this instead of direct HTTP for manual recaps.",
+    parameters: Type.Object({
+      title: Type.String({ minLength: 1 }),
+      parts: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+    }),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      if (!activity) throw new Error("comms not initialized");
+      recapAbort?.abort();
+      const history = activity;
+      const delivery = prepareManualRecap(history, recapScope, params.title, params.parts);
+      await sendRecap(ctx, history, delivery, AbortSignal.any([lifetime.signal, ...(signal ? [signal] : [])]));
+      return { content: [{ type: "text", text: `Recap ${delivery.id}: all ${delivery.parts.length} parts stored and verified in full.` }],
+        details: { recapId: delivery.id, parts: delivery.parts.length, windowId: history.id } };
+    },
+  });
   pi.registerTool({
     name: "create_interaction_request",
     label: "Create Interaction Request",
@@ -837,12 +975,22 @@ export default function (pi: ExtensionAPI) {
 
   appendSentTouches = (updateId, touchIds) => pi.appendEntry(FOLDER_TOUCHES_SENT, { updateId, touchIds });
   pi.on("session_start", async (_event, ctx) => { await startComms(pi, ctx); });
+  pi.on("tool_call", async (event, ctx) => {
+    userActivity();
+    try { changeSnapshots.set(event.toolCallId, await beforeCodeChange(event.toolName, event.input, ctx.cwd)); }
+    catch { changeSnapshots.delete(event.toolCallId); }
+  });
   pi.on("tool_result", async (event, ctx) => {
+    userActivity();
+    if (event.toolName !== "send_recap") recordActivity("tool", `${event.toolName}\n${JSON.stringify(event.input)}\n${textFromMessage(event)}`);
     if (!event.isError && ["bash", "edit", "write"].includes(event.toolName)) {
       void identityRegistration?.refresh();
     }
     try {
-      const touch = await observeFolderTouch(event.toolName, event.input, event.isError, ctx.cwd);
+      const before = changeSnapshots.get(event.toolCallId);
+      changeSnapshots.delete(event.toolCallId);
+      const codeChanged = !event.isError && await afterCodeChange(before);
+      const touch = await observeFolderTouch(event.toolName, event.input, event.isError, ctx.cwd, codeChanged);
       if (touch) pi.appendEntry(FOLDER_TOUCH, touch);
     } catch (err: any) {
       await logInference({ event: "folder-tracking-error", tool: event.toolName, error: err?.message ?? String(err) });
@@ -850,17 +998,36 @@ export default function (pi: ExtensionAPI) {
     }
   });
   pi.on("input", async () => {
+    userActivity();
     cancelPendingInference("user-input");
     return { action: "continue" as const };
   });
+  pi.on("agent_start", async () => { agentBusy = true; userActivity(); });
+  pi.on("agent_settled", async (_event, ctx) => {
+    agentBusy = false;
+    userActivity();
+    maybeRunUpdateBatch(ctx);
+    scheduleInference(ctx);
+  });
+  pi.on("message_start", async () => { userActivity(); });
+  pi.on("message_update", async () => { userActivity(); });
+  pi.on("tool_execution_start", async () => { userActivity(); });
+  pi.on("tool_execution_update", async () => { userActivity(); });
+  pi.on("tool_execution_end", async () => { userActivity(); });
+  pi.on("before_provider_request", async () => { userActivity(); });
+  pi.on("user_bash", async (event) => { recordActivity("user-bash", event.command); });
   pi.on("message_end", async (event, ctx) => {
+    userActivity();
     const msg: any = event.message;
+    if (msg?.role === "user" || msg?.role === "assistant") {
+      recordActivity(msg.role, textFromMessage(msg));
+    }
     if (msg?.role !== "assistant") return;
     if (msg.stopReason && msg.stopReason !== "stop") return;
     maybeRunUpdateBatch(ctx);
     scheduleInference(ctx);
   });
-  pi.on("session_shutdown", async () => { cancelPendingInference("shutdown"); stopTimers(); currentCtx = undefined; activeModalRequestId = undefined; });
+  pi.on("session_shutdown", async () => { cancelPendingInference("shutdown"); stopTimers(); changeSnapshots.clear(); currentCtx = undefined; activeModalRequestId = undefined; });
 
   pi.registerCommand("comms-init", {
     description: "Reinitialize Scryer interaction comms producer and local TUI consumer",

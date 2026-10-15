@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -95,8 +95,13 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   await invoke("session_start");
   await extension.commands.get("comms-update-delay").handler("1", ctx);
   branch.push({ type: "message", message: { role: "user", content: "Make two changes" } });
-  await invoke("tool_result", { toolName: "edit", input: { path: "first/file" }, isError: false });
-  await invoke("tool_result", { toolName: "write", input: { path: "second/file" }, isError: false });
+  await writeFile(join(directory, "first/file.ts"), "export const first = 1;\n");
+  await invoke("tool_call", { toolCallId: "first", toolName: "edit", input: { path: "first/file.ts" } });
+  await writeFile(join(directory, "first/file.ts"), "export const first = 2;\n");
+  await invoke("tool_result", { toolCallId: "first", toolName: "edit", input: { path: "first/file.ts" }, isError: false });
+  await invoke("tool_call", { toolCallId: "second", toolName: "write", input: { path: "second/file.ts" } });
+  await writeFile(join(directory, "second/file.ts"), "export const second = 1;\n");
+  await invoke("tool_result", { toolCallId: "second", toolName: "write", input: { path: "second/file.ts" }, isError: false });
   await invoke("tool_result", { toolName: "read", input: { path: "unrelated/file" }, isError: false });
   await invoke("tool_result", { toolName: "bash", input: { command: "git status" }, isError: false });
   await invoke("tool_result", { toolName: "write", input: { path: "failed/file" }, isError: true });
@@ -128,7 +133,7 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   await invoke("message_end", { message: { role: "assistant", stopReason: "stop" } });
   await waitForBatch(4);
   assert.deepEqual(posts[3].metadata.v2meta.foldersTouched, []);
-  assert.equal(posts[3].body, "<coding>Reviewed changes without file edits</coding>", "Coding notes without touched folders are tagged too");
+  assert.equal(posts[3].body, "Reviewed changes without file edits", "A model coding flag cannot tag a read-only review");
   for (let attempt = 0; attempt < 200 && registrations.length < 2; attempt++) await new Promise((done) => setTimeout(done, 10));
   assert.deepEqual(registrations[1], registrations[0], "Reload/resume always registers the same pair again");
   activeSessionId = "new-session-id";
