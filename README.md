@@ -59,6 +59,22 @@ Every startup/reload/resume registers with `POST /api/identities` at the interac
 - Git metadata is checked every 30 seconds and after successful Bash/edit/write results. A newly initialized repo becomes portable once an origin is available; discovery refreshes `.scryer` repo metadata and re-registers the same identity/session. Unchanged acknowledged payloads do not repeat HTTP requests, and temporary absence does not erase a known repo.
 - Shutdown/reload cancels pending registration and its timer. No existing identity is renamed or deleted.
 
+## Coding notes
+
+During coding, `comms` inference records changes at logical milestones (implementation,
+review, debugging, tests/builds, commits and pushes). It classifies these updates with
+`coding: true`, including read-only reviews or test results with no touched folders.
+Updates with selected file/command touch observations are also treated as coding notes
+if the model omits the flag. Unrelated non-coding updates remain plain.
+
+Before delivery, coding-note bodies are wrapped in `<coding>...</coding>`. Existing
+wrappers are not doubled, and truncation reserves room for both tags within the
+1,200-character body limit. The same body is sent to the append-only update log and
+the existing session-task mirror; titles and metadata are unchanged. The inference
+prompt also requires requested notes to contain the note itself, and revisions to
+produce new updates rather than rewriting history. Existing batch/flush timing is
+unchanged.
+
 ## Folders in updates
 
 Every update includes `metadata.v2meta.foldersTouched`, for example:

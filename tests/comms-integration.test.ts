@@ -25,6 +25,9 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   const notifications: { text: string; level: string }[] = [];
   let inference = 0;
   const stream = (_model: any, context: any) => ({ result: async () => {
+    const systemPrompt = context.messages.find((message: any) => message.role === "system").content;
+    assert.match(systemPrompt, /"coding":true/);
+    assert.match(systemPrompt, /Revisions to notes require new updates/);
     const input = JSON.parse(context.messages.find((message: any) => message.role === "user").content[0].text);
     inference++;
     const touches = input.folderTouches;
@@ -32,9 +35,9 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
     else assert.deepEqual(touches, []);
     const updates = inference === 1 ? [
       { kind: "progress", title: "First change", body: "Changed first file", touchIds: [touches[0].id] },
-      { kind: "progress", title: "Second change", body: "Changed second file", touchIds: [touches[1].id] },
-      { kind: "decision", title: "Discussion", body: "A decision without file changes", touchIds: [] },
-    ] : [{ kind: "decision", title: "Another discussion", body: "No changes", touchIds: [] }];
+      { kind: "progress", title: "Second change", body: "<coding>Changed second file</coding>", coding: true, touchIds: [touches[1].id] },
+      { kind: "decision", title: "Discussion", body: "A decision without file changes", coding: false, touchIds: [] },
+    ] : [{ kind: "progress", title: "Code review", body: "Reviewed changes without file edits", coding: true, touchIds: [] }];
     return { content: [{ type: "text", text: JSON.stringify({ updates }) }], stopReason: "stop" };
   } });
   ai.registerApiProvider({ api: "scryer-test-api", stream, streamSimple: stream }, "scryer-test");
@@ -106,6 +109,9 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   assert.ok(posts[0].metadata.v2meta.foldersTouched[0].endsWith(`:${directory}/first`));
   assert.ok(posts[1].metadata.v2meta.foldersTouched[0].endsWith(`:${directory}/second`));
   assert.deepEqual(posts[2].metadata.v2meta.foldersTouched, []);
+  assert.equal(posts[0].body, "<coding>Changed first file</coding>", "Observed file changes are tagged even if the model omits coding");
+  assert.equal(posts[1].body, "<coding>Changed second file</coding>", "Already tagged bodies are not double-wrapped");
+  assert.equal(posts[2].body, "A decision without file changes", "Non-coding discussion remains unwrapped");
   assert.equal(posts[0].metadata.source, "secondary-agent");
   assert.equal(posts[0].metadata.v2meta.identities, undefined);
   for (let attempt = 0; attempt < 200 && registrations.length === 0; attempt++) await new Promise((done) => setTimeout(done, 10));
@@ -122,6 +128,7 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   await invoke("message_end", { message: { role: "assistant", stopReason: "stop" } });
   await waitForBatch(4);
   assert.deepEqual(posts[3].metadata.v2meta.foldersTouched, []);
+  assert.equal(posts[3].body, "<coding>Reviewed changes without file edits</coding>", "Coding notes without touched folders are tagged too");
   for (let attempt = 0; attempt < 200 && registrations.length < 2; attempt++) await new Promise((done) => setTimeout(done, 10));
   assert.deepEqual(registrations[1], registrations[0], "Reload/resume always registers the same pair again");
   activeSessionId = "new-session-id";

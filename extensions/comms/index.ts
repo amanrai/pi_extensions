@@ -8,6 +8,7 @@ import { homedir, hostname } from "node:os";
 import { Type } from "typebox";
 import { detectRuntimeMachineName, initializeStartupIdentity, refreshStartupRepo, updateIdentityMetadata, type StartupIdentity } from "./identity.ts";
 import { startIdentityRegistration } from "./registration.ts";
+import { formatUpdateBody } from "./updates.ts";
 import { FOLDER_TOUCH, FOLDER_TOUCHES_SENT, observeFolderTouch, pendingFolderTouches, selectUpdateFolders, type FolderTouch } from "./folders.ts";
 
 type InteractionChoice = { id: string; label: string; send?: string; custom?: boolean };
@@ -554,14 +555,14 @@ async function appendSessionTaskUpdate(ctx: ExtensionContext, update: SessionUpd
   await logInference({ event: "session-task-updated", taskId, updateId: update.id, kind: update.kind });
 }
 
-async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext; foldersTouched?: string[] } = {}) {
+async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext; foldersTouched?: string[]; coding?: boolean } = {}) {
   if (!producerFrom) throw new Error("comms not initialized");
   if (!startupIdentity) throw new Error("Scryer startup identity is required for updates");
   const metadata = updateIdentityMetadata(update.metadata, startupIdentity.name, options.foldersTouched);
   const normalized = {
     kind: update.kind,
     title: update.title.trim().slice(0, 140),
-    body: update.body.trim().slice(0, 1200),
+    body: formatUpdateBody(update.body, options.coding),
     level: update.level,
   };
   if (!normalized.title || !normalized.body) throw new Error("update title and body required");
@@ -627,7 +628,7 @@ Rules:
 
 const UPDATE_SYSTEM_PROMPT = `You create semantic decision/progress updates for batches of an agent session.
 Return ONLY JSON matching:
-{"updates":[{"kind":"progress|decision|blocked|waiting|done|error","title":"...","body":"...","level":"info|success|warning|error","touchIds":["observed-touch-id"]}]}
+{"updates":[{"kind":"progress|decision|blocked|waiting|done|error","title":"...","body":"...","coding":true,"level":"info|success|warning|error","touchIds":["observed-touch-id"]}]}
 or {"updates":[]}.
 Rules:
 - The input contains a batch of new user/assistant conversation messages, previous updates, and observed folderTouches from successful file changes or allowlisted state-changing commands.
@@ -635,6 +636,8 @@ Rules:
 - Use the tool, summary, folders, and createdAt of each observation to match it to the update. Separate unrelated work into separate updates. Do not attach the entire session's folders to every update.
 - Emit zero or more updates; use separate updates for separate decisions, actions, commits, pushes, blockers, or completions.
 - Create updates when something meaningful changed since the previous updates; err on the side of logging useful micro-context.
+- While coding, record changes at logical milestones: implementation, review, debugging, testing, builds, commits, and pushes. Set coding: true for these notes, even when no files changed; use coding: false for unrelated non-coding updates. Return plain body text; the extension adds the coding tags.
+- A request to make a note requires an update containing the note itself, not just a report that a local notes file was written. Revisions to notes require new updates; previous updates are never rewritten.
 - Optimize for decision logging: record decisions made, why they were made, alternatives rejected, assumptions introduced, and follow-up implied by the decision.
 - Also record current progress, blockers, waiting states, errors, or completion when useful.
 - If commits or pushes happened, explicitly include the repo, branch, commit SHA(s), remote/PR if known, and whether the work was pushed.
@@ -722,7 +725,7 @@ async function runUpdateInference(ctx: ExtensionContext, token: number, messages
       body: String(update?.body ?? "The agent made progress."),
       level,
       metadata: { source: "secondary-agent", token, batch: true },
-    }, { force: true, ctx, foldersTouched: selected.foldersTouched });
+    }, { force: true, ctx, foldersTouched: selected.foldersTouched, coding: typeof update?.coding === "boolean" ? update.coding : selected.touchIds.length > 0 });
     if (id) {
       created += 1;
       if (selected.touchIds.length) appendSentTouches(id, selected.touchIds);
