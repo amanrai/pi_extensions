@@ -68,14 +68,18 @@ async function output(command: string, args: string[], cwd: string) {
   }
 }
 
-export function runtimeMachineName(status: string | undefined, fallback: string): string {
+export function tailnetMachineName(status: string | undefined): string | undefined {
   try {
     const self = JSON.parse(status ?? "{}").Self;
     const dnsName = self?.DNSName;
     if (typeof dnsName === "string" && dnsName.trim()) return dnsName.trim().replace(/\.$/, "");
     if (typeof self?.HostName === "string" && self.HostName.trim()) return self.HostName.trim();
   } catch { /* Tailscale is optional. */ }
-  return fallback;
+  return undefined;
+}
+
+export function runtimeMachineName(status: string | undefined, fallback: string): string {
+  return tailnetMachineName(status) ?? fallback;
 }
 
 export async function detectRuntimeMachineName(directory: string): Promise<string> {
@@ -88,11 +92,7 @@ async function detectEnvironment(directory: string): Promise<Environment> {
     output("git", ["config", "--get", "remote.origin.url"], directory),
     output("git", ["rev-parse", "--show-toplevel"], directory),
   ]);
-  let tailnet_name: string | undefined;
-  try {
-    const name = JSON.parse(status ?? "{}").CurrentTailnet?.Name;
-    if (typeof name === "string" && name.trim()) tailnet_name = name;
-  } catch { /* Tailscale is optional. */ }
+  const tailnet_name = tailnetMachineName(status);
   return { machine_name: hostname() || undefined, tailnet_name, repo: root ? remote ?? root : undefined };
 }
 

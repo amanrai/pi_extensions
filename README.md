@@ -32,7 +32,7 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 }
 ```
 
-Machine, tailnet, and repo fields are optional. Machine and tailnet record the creator's environment and are not replaced by later sessions. Repo detection uses the origin URL, or the local Git root if no origin exists; a later startup refreshes it when available. Creation time and session remain unchanged.
+Machine, tailnet, and repo fields are optional. `tailnet_name` is the creator machine's Tailscale DNS name without the trailing dot (falling back to its Tailscale host name), not the logged-in account or network name. Machine and tailnet record the creator's environment and are not replaced by later sessions. Repo detection uses the origin URL, or the local Git root if no origin exists; a later startup refreshes it when available. Creation time and session remain unchanged.
 
 Every update sends the startup name in `metadata.v2meta.identity`, including discussion-only and test updates. Existing metadata is preserved; full `.scryer` records and the old `identities` list are not sent. Updates require successful startup identity initialization. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
 
