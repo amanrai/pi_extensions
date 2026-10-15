@@ -1,8 +1,8 @@
 /**
  * Starship + pi footer extension
  *
- * Left side  — delegates entirely to `starship prompt` so colours, icons, and
- *              segments match your shell exactly. Appends PR #N (clickable) if
+ * Left side  — agent_name@folder followed by `starship prompt` so colours,
+ *              icons, and segments match your shell. Appends PR #N (clickable) if
  *              there is an open PR for the current branch.
  *
  * Right side — anthropic → Claude Haiku 4.5 ◆ medium  ↑12k ↓4k $0.042
@@ -14,7 +14,7 @@ import type { AssistantMessage } from "@mariozechner/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { execFile } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -37,6 +37,14 @@ function hyperlink(url: string, text: string): string {
 function formatPwd(cwd: string): string {
   const home = homedir();
   return cwd === home ? "~" : cwd.startsWith(home + "/") ? "~" + cwd.slice(home.length) : cwd;
+}
+
+async function fetchAgentName(cwd: string): Promise<string | null> {
+  try {
+    const record = JSON.parse(await readFile(join(cwd, ".scryer"), "utf8"));
+    const name = record?.created_by?.[0]?.name;
+    return typeof name === "string" && name.trim() ? name.trim() : null;
+  } catch { return null; }
 }
 
 // ── Data fetching ────────────────────────────────────────────────────────────
@@ -129,6 +137,7 @@ async function writePMProjectCache(projects: PMProject[]) {
 
 export default function (pi: ExtensionAPI) {
   let starshipPrompt: string | null = null;
+  let agentName: string | null      = null;
   let pr: PRInfo | null             = null;
   let thinkingLevel: string         = "off";
   let lastRenderWidth               = 120;
@@ -201,6 +210,7 @@ export default function (pi: ExtensionAPI) {
   }
 
   pi.on("session_start", async (_event, ctx) => {
+    agentName = await fetchAgentName(ctx.cwd);
     thinkingLevel = pi.getThinkingLevel();
     refreshAll(ctx);
     startPMTimers();
@@ -222,7 +232,7 @@ export default function (pi: ExtensionAPI) {
           // ── Left: starship output + PR ───────────────────────────────────
           const leftParts: string[] = [];
 
-          leftParts.push(bold(cyan(formatPwd(ctx.cwd))));
+          leftParts.push(bold(cyan(`${agentName ? `${agentName}@` : ""}${formatPwd(ctx.cwd)}`)));
 
           if (starshipPrompt) leftParts.push(" " + starshipPrompt);
 

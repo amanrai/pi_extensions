@@ -9,7 +9,7 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 - `read-md.ts` — `/read [path]` and `ctrl+k` Markdown picker/viewer for human reading, no LM context injection.
 - `smart-status.ts` — `/status` command with model/context/session usage and Codex quota bars.
 - `switch-to.ts` — `/switchTo` command to pick a session for the current folder and resume from a tree point.
-- `starship-footer.ts` — Starship-powered footer with pwd, PR link, model, thinking level, tokens, and Codex subscription-aware cost display.
+- `starship-footer.ts` — Starship-powered footer with `agent_name@folder` from the startup `.scryer`, PR link, model, thinking level, tokens, and Codex subscription-aware cost display.
 - `pi-codex-account` — bundled third-party `/codex` account-profile commands for saving, switching, and checking usage of named OpenAI Codex logins.
 
 ## Folder identity startup
