@@ -6,6 +6,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { Type } from "typebox";
+import { initializeStartupIdentity, type StartupIdentity } from "./identity.ts";
 
 type InteractionChoice = { id: string; label: string; send?: string; custom?: boolean };
 type InteractionRequest = {
@@ -63,6 +64,7 @@ const MARKER_RE = /^@@SCRYER_INTERACTION_PRODUCER_V1@@(\{[^\r\n]*\})@@END_SCRYER
 
 let currentCtx: ExtensionContext | undefined;
 let producerFrom: string | undefined;
+let startupIdentity: StartupIdentity | undefined;
 let consumerEnabled = false;
 let consumerTimer: NodeJS.Timeout | undefined;
 let responseTimer: NodeJS.Timeout | undefined;
@@ -150,6 +152,7 @@ function producerMarker(from: string, ctx: ExtensionContext) {
     emittedAt: new Date().toISOString(),
     kind: "pi",
     cwd: ctx.cwd,
+    identity: startupIdentity?.name,
     sessionFile: ctx.sessionManager.getSessionFile?.() ? basename(ctx.sessionManager.getSessionFile()!) : undefined,
   })}${MARKER_SUFFIX}`;
 }
@@ -370,6 +373,14 @@ function stopTimers() {
 async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   currentCtx = ctx;
   producerFrom = await ensureProducerFrom(ctx);
+  startupIdentity = undefined;
+  try {
+    startupIdentity = await initializeStartupIdentity(ctx.cwd, await sessionKey(ctx));
+  } catch (err: any) {
+    const error = err?.message ?? String(err);
+    ctx.ui.notify(`Scryer identity initialization failed: ${error}`, "error");
+    await logInference({ event: "identity-startup-error", error });
+  }
   semanticUpdateCursor = ctx.sessionManager.getBranch().length;
   semanticUpdateRunning = false;
   publishCommsStatus();

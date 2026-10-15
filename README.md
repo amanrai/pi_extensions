@@ -12,6 +12,32 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 - `starship-footer.ts` — Starship-powered footer with pwd, PR link, model, thinking level, tokens, and Codex subscription-aware cost display.
 - `pi-codex-account` — bundled third-party `/codex` account-profile commands for saving, switching, and checking usage of named OpenAI Codex logins.
 
+## Folder identity startup
+
+`comms` initializes `.scryer` in the exact folder where Pi starts, independently of parent folders. It reuses the sole `created_by` identity, or generates an `adjective_noun` name from bundled word lists. Keep `.scryer` checked into Git.
+
+```json
+{
+  "created_by": [{
+    "name": "quiet_badger",
+    "machine_name": "creator-machine",
+    "tailnet_name": "creator-tailnet",
+    "repo": "https://github.com/example/repo.git",
+    "created_at": "2026-10-15T00:00:00.000Z",
+    "session": "pi-session:example"
+  }],
+  "command_runner": [],
+  "file_modifier": [],
+  "version-manager": []
+}
+```
+
+Machine, tailnet, and repo fields are optional. Machine and tailnet record the creator's environment and are not replaced by later sessions. Repo detection uses the origin URL, or the local Git root if no origin exists; a later startup refreshes it when available. Creation time and session remain unchanged.
+
+Startup does not add entries to the action lists. Action tracking and `metadata.v2meta.identities` publishing are not implemented yet. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
+
+Tests: `node --experimental-strip-types --test tests/comms-identity.test.ts` (Node 22.19+).
+
 ## Install
 
 ```bash
