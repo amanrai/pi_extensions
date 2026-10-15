@@ -36,9 +36,28 @@ Machine, tailnet, and repo fields are optional. Machine and tailnet record the c
 
 Every update sends the startup name in `metadata.v2meta.identity`, including discussion-only and test updates. Existing metadata is preserved; full `.scryer` records and the old `identities` list are not sent. Updates require successful startup identity initialization. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
 
-`.scryer` keeps action history separately. Action entries contain `name` and a `touched_at` list of UTC hours such as `2026-10-15T02Z`; old name-only entries remain readable. Startup does not add action entries. Automatic action tracking is not implemented yet.
+`.scryer` keeps action history separately. Action entries contain `name` and a `touched_at` list of UTC hours such as `2026-10-15T02Z`; old name-only entries remain readable. Startup does not add action entries. Automatic `.scryer` action-list maintenance is not implemented yet.
 
-Tests: `node --experimental-strip-types --test tests/comms-identity.test.ts` (Node 22.19+).
+## Folders in updates
+
+Every update includes `metadata.v2meta.foldersTouched`, for example:
+
+```json
+{
+  "identity": "quiet_badger",
+  "foldersTouched": ["thinkpad.tailnet.ts.net:/home/amanrai/Code/project/src"]
+}
+```
+
+- The extension observes successful `edit`/`write` results and allowlisted state-changing `bash` commands. Reads, read-only commands, and failed tool results do not produce observations.
+- The initial command list covers file operations (`touch`, `mkdir`, `cp`, `mv`, `rm`, `ln`, `truncate`, `chmod`, `chown`), in-place `sed`/`perl`, patches, file-output redirection/`tee`, identifiable Python/Node writes, and Git commits.
+- Command observations include the execution folder and statically identifiable affected folders. `cd` and `git -C` are resolved. Scripts are inspected, never executed by the tracker.
+- This is a conservative command-list heuristic, not a filesystem audit. Unsupported control flow/subshells are skipped; computed paths and indirect writes may not be identified. Successful no-op mutators may still count. Partial changes from failed tools are not tracked.
+- The update generator references observation IDs for the particular update it describes; the extension resolves those IDs to paths. It cannot invent paths. Discussion-only updates have an empty list.
+- Paths use the **current machine's** Tailscale DNS name (without its trailing dot), falling back to its Tailscale host name, then local hostname—not the identity creator's machine.
+- Observations and sent markers live in branch-local Pi session entries. Reload/resume retains pending observations without replaying sent ones; touches arriving during inference are left for the next batch.
+
+Tests (Node 22.19+): `node --experimental-strip-types --test tests/*.test.ts`. To include the mocked Pi runtime integration test, set `PI_TEST_AGENT_ROOT` to the installed `@earendil-works/pi-coding-agent` package directory.
 
 ## Install
 

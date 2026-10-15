@@ -9,7 +9,8 @@
   "license": "MIT",
   "type": "module",
   "dependencies": {
-    "pi-codex-account": "0.1.1"
+    "pi-codex-account": "0.1.1",
+    "shell-quote": "1.12.0"
   },
   "pi": {
     "extensions": [

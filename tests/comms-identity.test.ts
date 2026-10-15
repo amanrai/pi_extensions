@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { generateIdentityName, initializeStartupIdentity, updateIdentityMetadata } from "../extensions/comms/identity.ts";
+import { generateIdentityName, initializeStartupIdentity, runtimeMachineName, updateIdentityMetadata } from "../extensions/comms/identity.ts";
 
 const options = {
   environment: async () => ({ machine_name: "creator-machine", tailnet_name: "creator-tailnet" }),
@@ -128,21 +128,21 @@ test("update metadata contains only the sender name and preserves existing field
   const before = JSON.stringify(metadata);
   assert.deepEqual(updateIdentityMetadata(metadata, "impressed_harrier"), {
     source: "secondary-agent", token: 1, batch: true,
-    v2meta: { identity: "impressed_harrier", unrelated: true },
+    v2meta: { identity: "impressed_harrier", unrelated: true, foldersTouched: [] },
   });
   assert.equal(JSON.stringify(metadata), before);
 });
 
 test("updates without prior metadata still carry the sender name", () => {
   assert.deepEqual(updateIdentityMetadata(undefined, "quiet_badger"), {
-    v2meta: { identity: "quiet_badger" },
+    v2meta: { identity: "quiet_badger", foldersTouched: [] },
   });
 });
 
 test("invalid prior v2meta is replaced, and an empty sender is rejected", () => {
   for (const v2meta of [null, false, "invalid", []]) {
     assert.deepEqual(updateIdentityMetadata({ v2meta }, "quiet_badger"), {
-      v2meta: { identity: "quiet_badger" },
+      v2meta: { identity: "quiet_badger", foldersTouched: [] },
     });
   }
   assert.throws(() => updateIdentityMetadata({}, " "), /startup identity is required/);
@@ -155,6 +155,21 @@ test("startup preserves action entries with UTC hourly touch timestamps", async 
   const identity = await initializeStartupIdentity(directory, "pi-session:new", options);
   assert.deepEqual(identity.record.file_modifier, [touch]);
   assert.deepEqual((await record(directory)).file_modifier, [touch]);
+});
+
+test("folder metadata is deduplicated and cannot reuse stale folders", () => {
+  const metadata = { v2meta: { foldersTouched: ["old:/repo"] } };
+  assert.deepEqual(updateIdentityMetadata(metadata, "quiet_badger", ["current:/b", "current:/a", "current:/a"]), {
+    v2meta: { identity: "quiet_badger", foldersTouched: ["current:/a", "current:/b"] },
+  });
+  assert.deepEqual(updateIdentityMetadata(metadata, "quiet_badger").v2meta.foldersTouched, []);
+});
+
+test("runtime machine qualification prefers current Tailscale DNS name, then host name", () => {
+  assert.equal(runtimeMachineName(JSON.stringify({ Self: { DNSName: "current.tailnet.ts.net.", HostName: "host" } }), "local"), "current.tailnet.ts.net");
+  assert.equal(runtimeMachineName(JSON.stringify({ Self: { HostName: "tail-host" } }), "local"), "tail-host");
+  assert.equal(runtimeMachineName(undefined, "local"), "local");
+  assert.equal(runtimeMachineName("bad json", "local"), "local");
 });
 
 test("generated names use adjective_noun without people's names", () => {

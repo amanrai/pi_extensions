@@ -49,14 +49,14 @@ export function generateIdentityName() {
 }
 
 /** Attach only the sender's name; never send the folder's identity lists. */
-export function updateIdentityMetadata(metadata: Record<string, unknown> | undefined, name: string) {
+export function updateIdentityMetadata(metadata: Record<string, unknown> | undefined, name: string, foldersTouched: readonly string[] = []) {
   if (!name.trim()) throw new Error("Scryer startup identity is required for updates");
   const previous = metadata?.v2meta;
   const v2meta: Record<string, unknown> = previous && typeof previous === "object" && !Array.isArray(previous)
     ? { ...previous as Record<string, unknown> }
     : {};
   delete v2meta.identities;
-  return { ...metadata, v2meta: { ...v2meta, identity: name } };
+  return { ...metadata, v2meta: { ...v2meta, identity: name, foldersTouched: [...new Set(foldersTouched)].sort() } };
 }
 
 async function output(command: string, args: string[], cwd: string) {
@@ -66,6 +66,20 @@ async function output(command: string, args: string[], cwd: string) {
   } catch {
     return undefined;
   }
+}
+
+export function runtimeMachineName(status: string | undefined, fallback: string): string {
+  try {
+    const self = JSON.parse(status ?? "{}").Self;
+    const dnsName = self?.DNSName;
+    if (typeof dnsName === "string" && dnsName.trim()) return dnsName.trim().replace(/\.$/, "");
+    if (typeof self?.HostName === "string" && self.HostName.trim()) return self.HostName.trim();
+  } catch { /* Tailscale is optional. */ }
+  return fallback;
+}
+
+export async function detectRuntimeMachineName(directory: string): Promise<string> {
+  return runtimeMachineName(await output("tailscale", ["status", "--json"], directory), hostname());
 }
 
 async function detectEnvironment(directory: string): Promise<Environment> {

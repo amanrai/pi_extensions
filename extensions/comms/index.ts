@@ -4,9 +4,10 @@ import { Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { Type } from "typebox";
-import { initializeStartupIdentity, updateIdentityMetadata, type StartupIdentity } from "./identity.ts";
+import { detectRuntimeMachineName, initializeStartupIdentity, updateIdentityMetadata, type StartupIdentity } from "./identity.ts";
+import { FOLDER_TOUCH, FOLDER_TOUCHES_SENT, observeFolderTouch, pendingFolderTouches, selectUpdateFolders, type FolderTouch } from "./folders.ts";
 
 type InteractionChoice = { id: string; label: string; send?: string; custom?: boolean };
 type InteractionRequest = {
@@ -65,6 +66,7 @@ const MARKER_RE = /^@@SCRYER_INTERACTION_PRODUCER_V1@@(\{[^\r\n]*\})@@END_SCRYER
 let currentCtx: ExtensionContext | undefined;
 let producerFrom: string | undefined;
 let startupIdentity: StartupIdentity | undefined;
+let machineName = hostname();
 let consumerEnabled = false;
 let consumerTimer: NodeJS.Timeout | undefined;
 let responseTimer: NodeJS.Timeout | undefined;
@@ -81,6 +83,7 @@ let semanticUpdateRunning = false;
 let semanticUpdatePromise: Promise<void> | undefined;
 let lastUpdatePostAt = 0;
 let lastUpdateHash = "";
+let appendSentTouches: (updateId: string, touchIds: string[]) => void;
 const discoveredFrom = new Set<string>();
 const processedResponses = new Set<string>();
 
@@ -104,7 +107,7 @@ const overlayStyle = {
   border(width: number) { return BG + FG + "─".repeat(Math.max(1, width)) + RESET; },
 };
 
-const MODAL_OVERLAY_OPTIONS = { anchor: "center" as const, offsetY: 0, width: "90%", maxHeight: "80%" };
+const MODAL_OVERLAY_OPTIONS = { anchor: "center", offsetY: 0, width: "90%", maxHeight: "80%" } as const;
 
 async function readState(): Promise<CommsState> {
   try { return JSON.parse(await readFile(STATE_PATH, "utf8")) as CommsState; }
@@ -375,7 +378,10 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   producerFrom = await ensureProducerFrom(ctx);
   startupIdentity = undefined;
   try {
-    startupIdentity = await initializeStartupIdentity(ctx.cwd, await sessionKey(ctx));
+    [startupIdentity, machineName] = await Promise.all([
+      initializeStartupIdentity(ctx.cwd, await sessionKey(ctx)),
+      detectRuntimeMachineName(ctx.cwd),
+    ]);
   } catch (err: any) {
     const error = err?.message ?? String(err);
     ctx.ui.notify(`Scryer identity initialization failed: ${error}`, "error");
@@ -532,10 +538,10 @@ async function appendSessionTaskUpdate(ctx: ExtensionContext, update: SessionUpd
   await logInference({ event: "session-task-updated", taskId, updateId: update.id, kind: update.kind });
 }
 
-async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext } = {}) {
+async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext; foldersTouched?: string[] } = {}) {
   if (!producerFrom) throw new Error("comms not initialized");
   if (!startupIdentity) throw new Error("Scryer startup identity is required for updates");
-  const metadata = updateIdentityMetadata(update.metadata, startupIdentity.name);
+  const metadata = updateIdentityMetadata(update.metadata, startupIdentity.name, options.foldersTouched);
   const normalized = {
     kind: update.kind,
     title: update.title.trim().slice(0, 140),
@@ -605,10 +611,12 @@ Rules:
 
 const UPDATE_SYSTEM_PROMPT = `You create semantic decision/progress updates for batches of an agent session.
 Return ONLY JSON matching:
-{"updates":[{"kind":"progress|decision|blocked|waiting|done|error","title":"...","body":"...","level":"info|success|warning|error"}]}
+{"updates":[{"kind":"progress|decision|blocked|waiting|done|error","title":"...","body":"...","level":"info|success|warning|error","touchIds":["observed-touch-id"]}]}
 or {"updates":[]}.
 Rules:
-- The input contains a batch of new user/assistant conversation messages plus previous updates for context.
+- The input contains a batch of new user/assistant conversation messages, previous updates, and observed folderTouches from successful file changes or allowlisted state-changing commands.
+- For each update, include touchIds for ONLY the observed actions that specific update describes. Copy IDs exactly; never invent IDs or paths. Discussion-only updates use touchIds: [].
+- Use the tool, summary, folders, and createdAt of each observation to match it to the update. Separate unrelated work into separate updates. Do not attach the entire session's folders to every update.
 - Emit zero or more updates; use separate updates for separate decisions, actions, commits, pushes, blockers, or completions.
 - Create updates when something meaningful changed since the previous updates; err on the side of logging useful micro-context.
 - Optimize for decision logging: record decisions made, why they were made, alternatives rejected, assumptions introduced, and follow-up implied by the decision.
@@ -670,10 +678,10 @@ function userTurnCount(messages: ConversationMessage[]) {
   return messages.filter((message) => message.role === "user").length;
 }
 
-async function runUpdateInference(ctx: ExtensionContext, token: number, messages: ConversationMessage[]) {
+async function runUpdateInference(ctx: ExtensionContext, token: number, messages: ConversationMessage[], folderTouches: FolderTouch[]) {
   if (!ctx.model) return;
   const previousUpdates = await recentUpdates(5).catch(() => []);
-  const input = { messages, previousUpdates };
+  const input = { messages, previousUpdates, folderTouches };
   await logInference({ event: "update-request", token, model: `${ctx.model.provider}/${ctx.model.id}`, batchMessages: messages.length, batchUserTurns: userTurnCount(messages), input });
   const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
   if (!auth.ok || !auth.apiKey) throw new Error(auth.ok ? `No API key for ${ctx.model.provider}` : auth.error);
@@ -691,14 +699,18 @@ async function runUpdateInference(ctx: ExtensionContext, token: number, messages
   for (const update of updates) {
     const kind = ["progress", "decision", "blocked", "waiting", "done", "error"].includes(update?.kind) ? update.kind : "progress";
     const level = ["info", "success", "warning", "error"].includes(update?.level) ? update.level : kind === "error" ? "error" : kind === "blocked" || kind === "waiting" ? "warning" : kind === "done" ? "success" : "info";
+    const selected = selectUpdateFolders(folderTouches, update?.touchIds, machineName);
     const id = await createSessionUpdate({
       kind,
       title: String(update?.title ?? "Session update"),
       body: String(update?.body ?? "The agent made progress."),
       level,
       metadata: { source: "secondary-agent", token, batch: true },
-    }, { force: true, ctx });
-    if (id) created += 1;
+    }, { force: true, ctx, foldersTouched: selected.foldersTouched });
+    if (id) {
+      created += 1;
+      if (selected.touchIds.length) appendSentTouches(id, selected.touchIds);
+    }
   }
   await logInference({ event: created ? "updates-created" : "updates-skipped", token, count: created });
 }
@@ -745,10 +757,12 @@ function publishCommsStatus() {
 }
 
 function startUpdateBatch(ctx: ExtensionContext, messages: ConversationMessage[], reason: string) {
-  semanticUpdateCursor = ctx.sessionManager.getBranch().length;
+  const branch = ctx.sessionManager.getBranch();
+  const folderTouches = pendingFolderTouches(branch);
+  semanticUpdateCursor = branch.length;
   const token = ++updateInferenceToken;
   semanticUpdateRunning = true;
-  semanticUpdatePromise = runUpdateInference(ctx, token, messages)
+  semanticUpdatePromise = runUpdateInference(ctx, token, messages, folderTouches)
     .catch((err) => logInference({ event: "update-error", token, reason, error: err?.message ?? String(err) }))
     .finally(() => {
       semanticUpdateRunning = false;
@@ -802,7 +816,17 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  appendSentTouches = (updateId, touchIds) => pi.appendEntry(FOLDER_TOUCHES_SENT, { updateId, touchIds });
   pi.on("session_start", async (_event, ctx) => { await startComms(pi, ctx); });
+  pi.on("tool_result", async (event, ctx) => {
+    try {
+      const touch = await observeFolderTouch(event.toolName, event.input, event.isError, ctx.cwd);
+      if (touch) pi.appendEntry(FOLDER_TOUCH, touch);
+    } catch (err: any) {
+      await logInference({ event: "folder-tracking-error", tool: event.toolName, error: err?.message ?? String(err) });
+      ctx.ui.notify("Scryer could not record folders for this tool result", "warning");
+    }
+  });
   pi.on("input", async () => {
     cancelPendingInference("user-input");
     return { action: "continue" as const };
