@@ -232,7 +232,7 @@ export default function (pi: ExtensionAPI) {
           // ── Left: starship output + PR ───────────────────────────────────
           const leftParts: string[] = [];
 
-          const displayName = agentName?.replace(/^([a-z]+_[a-z]+)_[0-9a-f]{4}$/, "$1");
+          const displayName = agentName?.replace(/^([a-z]+_[a-z]+)_(?:[a-z]{12}|[0-9a-f]{4})$/, "$1");
           leftParts.push(bold(cyan(`${displayName ? `${displayName}@` : ""}${formatPwd(ctx.cwd)}`)));
 
           if (starshipPrompt) leftParts.push(" " + starshipPrompt);

@@ -6,7 +6,8 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { homedir, hostname } from "node:os";
 import { Type } from "typebox";
-import { detectRuntimeMachineName, initializeStartupIdentity, updateIdentityMetadata, type StartupIdentity } from "./identity.ts";
+import { detectRuntimeMachineName, initializeStartupIdentity, refreshStartupRepo, updateIdentityMetadata, type StartupIdentity } from "./identity.ts";
+import { startIdentityRegistration } from "./registration.ts";
 import { FOLDER_TOUCH, FOLDER_TOUCHES_SENT, observeFolderTouch, pendingFolderTouches, selectUpdateFolders, type FolderTouch } from "./folders.ts";
 
 type InteractionChoice = { id: string; label: string; send?: string; custom?: boolean };
@@ -66,6 +67,7 @@ const MARKER_RE = /^@@SCRYER_INTERACTION_PRODUCER_V1@@(\{[^\r\n]*\})@@END_SCRYER
 let currentCtx: ExtensionContext | undefined;
 let producerFrom: string | undefined;
 let startupIdentity: StartupIdentity | undefined;
+let identityRegistration: ReturnType<typeof startIdentityRegistration> | undefined;
 let machineName = hostname();
 let consumerEnabled = false;
 let consumerTimer: NodeJS.Timeout | undefined;
@@ -120,6 +122,9 @@ async function writeState(state: CommsState) {
 }
 
 async function sessionKey(ctx: ExtensionContext) {
+  // The runtime ID exists before the first session-file write, and survives resume.
+  const id = ctx.sessionManager.getSessionId?.();
+  if (id) return `pi-session:${id}`;
   const file = ctx.sessionManager.getSessionFile?.();
   if (file) {
     try {
@@ -365,6 +370,8 @@ async function pollResponses(pi: ExtensionAPI, ctx: ExtensionContext) {
 }
 
 function stopTimers() {
+  identityRegistration?.stop();
+  identityRegistration = undefined;
   if (consumerTimer) clearInterval(consumerTimer);
   if (responseTimer) clearInterval(responseTimer);
   terminalInputUnsubscribe?.();
@@ -374,6 +381,7 @@ function stopTimers() {
 }
 
 async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
+  stopTimers();
   currentCtx = ctx;
   producerFrom = await ensureProducerFrom(ctx);
   startupIdentity = undefined;
@@ -394,7 +402,15 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   lastResponseSince = new Date().toISOString();
   processedResponses.clear();
   emitMarker(pi, ctx);
-  stopTimers();
+  const identity = startupIdentity;
+  if (identity) {
+    identityRegistration = startIdentityRegistration({
+      name: identity.name, session: await sessionKey(ctx), directory: identity.directory,
+      machine: machineName, serviceUrl: SERVICE_URL,
+      onRepo: (repo) => refreshStartupRepo(identity, repo),
+      onError: (err: any) => logInference({ event: "identity-registration-error", error: err?.message ?? String(err) }),
+    });
+  }
   consumerTimer = setInterval(() => { if (currentCtx) pollActiveRequests(currentCtx).catch(() => {}); }, 1200);
   responseTimer = setInterval(() => { if (currentCtx) pollResponses(pi, currentCtx).catch(() => {}); }, 1200);
   if (ctx.hasUI && ctx.mode === "tui") {
@@ -819,6 +835,9 @@ export default function (pi: ExtensionAPI) {
   appendSentTouches = (updateId, touchIds) => pi.appendEntry(FOLDER_TOUCHES_SENT, { updateId, touchIds });
   pi.on("session_start", async (_event, ctx) => { await startComms(pi, ctx); });
   pi.on("tool_result", async (event, ctx) => {
+    if (!event.isError && ["bash", "edit", "write"].includes(event.toolName)) {
+      void identityRegistration?.refresh();
+    }
     try {
       const touch = await observeFolderTouch(event.toolName, event.input, event.isError, ctx.cwd);
       if (touch) pi.appendEntry(FOLDER_TOUCH, touch);

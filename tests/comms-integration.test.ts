@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -18,6 +19,9 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   const ai = await import(pathToFileURL(join(host!, "node_modules/@earendil-works/pi-ai/dist/compat.js")).href);
   const branch: any[] = [];
   const posts: any[] = [];
+  const registrations: any[] = [];
+  let registrationOffline = true;
+  let activeSessionId = "stable-session-id";
   const notifications: { text: string; level: string }[] = [];
   let inference = 0;
   const stream = (_model: any, context: any) => ({ result: async () => {
@@ -36,6 +40,14 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   ai.registerApiProvider({ api: "scryer-test-api", stream, streamSimple: stream }, "scryer-test");
   globalThis.fetch = async (url: any, options: any = {}) => {
     const path = new URL(String(url)).pathname;
+    if (path === "/api/identities") {
+      registrations.push(JSON.parse(options.body));
+      // A hanging/offline registry must not block startup or semantic updates.
+      if (registrationOffline) return new Promise((_done, reject) => {
+        options.signal.addEventListener("abort", () => reject(new Error("offline registration cancelled")), { once: true });
+      });
+      return Response.json({ ok: true });
+    }
     if (path === "/api/updates") {
       if (options.method === "POST") { posts.push(JSON.parse(options.body)); return Response.json({}); }
       return Response.json({ updates: [] });
@@ -55,7 +67,7 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   const ctx = {
     cwd: directory, hasUI: false, mode: "json",
     ui: { notify: (text: string, level: string) => notifications.push({ text, level }) },
-    sessionManager: { getSessionFile: () => undefined, getBranch: () => branch },
+    sessionManager: { getSessionId: () => activeSessionId, getSessionFile: () => undefined, getBranch: () => branch },
     model: { api: "scryer-test-api", provider: "scryer-test", id: "test" },
     modelRegistry: { getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test" }) },
   };
@@ -96,6 +108,13 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   assert.deepEqual(posts[2].metadata.v2meta.foldersTouched, []);
   assert.equal(posts[0].metadata.source, "secondary-agent");
   assert.equal(posts[0].metadata.v2meta.identities, undefined);
+  for (let attempt = 0; attempt < 200 && registrations.length === 0; attempt++) await new Promise((done) => setTimeout(done, 10));
+  assert.equal(registrations.length, 1);
+  assert.equal(registrations[0].name, name);
+  assert.equal(registrations[0].session, "pi-session:stable-session-id");
+  assert.ok(registrations[0].location.endsWith(`@${directory}`));
+  assert.equal(registrations[0].repo, undefined);
+  registrationOffline = false;
   // Reinitialization restores sent markers rather than replaying old folder touches.
   await extension.commands.get("comms-init").handler("", ctx);
   branch.push({ type: "message", message: { role: "user", content: "Discuss next steps" } });
@@ -103,4 +122,18 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   await invoke("message_end", { message: { role: "assistant", stopReason: "stop" } });
   await waitForBatch(4);
   assert.deepEqual(posts[3].metadata.v2meta.foldersTouched, []);
+  for (let attempt = 0; attempt < 200 && registrations.length < 2; attempt++) await new Promise((done) => setTimeout(done, 10));
+  assert.deepEqual(registrations[1], registrations[0], "Reload/resume always registers the same pair again");
+  activeSessionId = "new-session-id";
+  await extension.commands.get("comms-init").handler("", ctx);
+  for (let attempt = 0; attempt < 200 && registrations.length < 3; attempt++) await new Promise((done) => setTimeout(done, 10));
+  assert.equal(registrations[2].session, "pi-session:new-session-id");
+  assert.equal(registrations[2].name, name);
+  assert.equal(JSON.parse(await readFile(join(directory, ".scryer"), "utf8")).created_by[0].session, "pi-session:stable-session-id");
+  execFileSync("git", ["init", "--quiet", directory]);
+  execFileSync("git", ["-C", directory, "remote", "add", "origin", "git@github.com:Example/Project.git"]);
+  await invoke("tool_result", { toolName: "bash", input: { command: "git init" }, isError: false });
+  for (let attempt = 0; attempt < 200 && registrations.length < 4; attempt++) await new Promise((done) => setTimeout(done, 10));
+  assert.deepEqual(registrations[3], { ...registrations[2], repo: "git@github.com/example/project" });
+  assert.equal(JSON.parse(await readFile(join(directory, ".scryer"), "utf8")).created_by[0].repo, "git@github.com/example/project");
 });

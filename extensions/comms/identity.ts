@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { randomBytes, randomInt, randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { open, readFile, rename, unlink } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import adjectives from "./words/adjectives.ts";
 import nouns from "./words/nouns.ts";
+import { normalizeGitRepo } from "./repository.ts";
 
 export type CreatorIdentity = {
   name: string;
@@ -45,7 +46,8 @@ const adjectiveWords = adjectives.filter((word) => /^[a-z]+$/.test(word));
 const nounWords = nouns.filter((word) => /^[a-z]+$/.test(word));
 
 export function generateIdentityName() {
-  return `${adjectiveWords[randomInt(adjectiveWords.length)]}_${nounWords[randomInt(nounWords.length)]}_${randomBytes(2).toString("hex")}`;
+  const suffix = Array.from({ length: 12 }, () => String.fromCharCode(97 + randomInt(26))).join("");
+  return `${adjectiveWords[randomInt(adjectiveWords.length)]}_${nounWords[randomInt(nounWords.length)]}_${suffix}`;
 }
 
 /** Attach only the sender's name; never send the folder's identity lists. */
@@ -93,7 +95,7 @@ async function detectEnvironment(directory: string): Promise<Environment> {
     output("git", ["rev-parse", "--show-toplevel"], directory),
   ]);
   const tailnet_name = tailnetMachineName(status);
-  return { machine_name: hostname() || undefined, tailnet_name, repo: root ? remote ?? root : undefined };
+  return { machine_name: hostname() || undefined, tailnet_name, repo: root ? normalizeGitRepo(remote) ?? root : undefined };
 }
 
 function parseRecord(raw: string, path: string): ScryerRecord {
@@ -176,6 +178,20 @@ async function writeRecord(path: string, record: ScryerRecord) {
   } finally {
     await unlink(temporary).catch((error) => { if (error.code !== "ENOENT") throw error; });
   }
+}
+
+/** Refresh repo metadata after discovery, retaining the original creator provenance. */
+export async function refreshStartupRepo(identity: StartupIdentity, repo: string): Promise<void> {
+  await withRecordLock(identity.directory, async (path) => {
+    const record = await readRecord(path);
+    const creator = record.created_by[0];
+    if (!creator || creator.name !== identity.name) throw new Error(`${path}: startup identity changed`);
+    if (creator.repo !== repo) {
+      creator.repo = repo;
+      await writeRecord(path, record);
+    }
+    identity.record = record;
+  });
 }
 
 /** Resolve only this folder's identity. Never inherit a parent folder's name. */

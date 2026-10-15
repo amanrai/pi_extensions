@@ -201,16 +201,20 @@ test("default creator detection stores the Tailscale machine name", { skip: proc
   }
 });
 
-test("generated names use adjective_noun plus four random hexadecimal characters", () => {
+test("generated names use adjective_noun plus twelve random lowercase letters", () => {
+  const names = new Set<string>();
   for (let index = 0; index < 1000; index++) {
-    assert.match(generateIdentityName(), /^[a-z]+_[a-z]+_[0-9a-f]{4}$/);
+    const name = generateIdentityName();
+    assert.match(name, /^[a-z]+_[a-z]+_[a-z]{12}$/);
+    names.add(name);
   }
+  assert.equal(names.size, 1000);
 });
 
 test("startup persists the full suffixed name and reuses it across sessions", async (t) => {
   const directory = await fixture(t);
   const identity = await initializeStartupIdentity(directory, "pi-session:first", { environment: options.environment });
-  assert.match(identity.name, /^[a-z]+_[a-z]+_[0-9a-f]{4}$/);
+  assert.match(identity.name, /^[a-z]+_[a-z]+_[a-z]{12}$/);
   assert.equal((await record(directory)).created_by[0].name, identity.name);
   const resumed = await initializeStartupIdentity(directory, "pi-session:second", options);
   assert.equal(resumed.name, identity.name);

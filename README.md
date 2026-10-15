@@ -14,15 +14,15 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 
 ## Folder identity startup
 
-`comms` initializes `.scryer` in the exact folder where Pi starts, independently of parent folders. It reuses the sole `created_by` identity, or generates an `adjective_noun_<4 random hex characters>` name from bundled word lists and cryptographic random bytes. Keep `.scryer` checked into Git. Existing names are not renamed.
+`comms` initializes `.scryer` in the exact folder where Pi starts, independently of parent folders. It reuses the sole `created_by` identity, or generates an `adjective_noun_<12 random lowercase letters>` name from bundled word lists and cryptographically uniform random choices. Keep `.scryer` checked into Git. Existing names are not renamed.
 
 ```json
 {
   "created_by": [{
-    "name": "quiet_badger_a7c9",
+    "name": "quiet_badger_abcdefghijkl",
     "machine_name": "creator-machine",
     "tailnet_name": "creator-tailnet",
-    "repo": "https://github.com/example/repo.git",
+    "repo": "git@github.com/example/repo",
     "created_at": "2026-10-15T00:00:00.000Z",
     "session": "pi-session:example"
   }],
@@ -32,11 +32,32 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 }
 ```
 
-Machine, tailnet, and repo fields are optional. `tailnet_name` is the creator machine's Tailscale DNS name without the trailing dot (falling back to its Tailscale host name), not the logged-in account or network name. Machine and tailnet record the creator's environment and are not replaced by later sessions. Repo detection uses the origin URL, or the local Git root if no origin exists; a later startup refreshes it when available. Creation time and session remain unchanged.
+Machine, tailnet, and repo fields are optional. `tailnet_name` is the creator machine's Tailscale DNS name without the trailing dot (falling back to its Tailscale host name), not the logged-in account or network name. Machine and tailnet record the creator's environment and are not replaced by later sessions. Creator repo metadata uses a normalized origin key, or the local Git root if no portable origin exists; startup refreshes it when available. Background discovery also refreshes it when an origin appears. Creation time and session remain unchanged.
 
-Every update sends the full startup name, including its suffix, in `metadata.v2meta.identity`, including discussion-only and test updates. Only the Starship footer hides the four-character suffix. Existing metadata is preserved; full `.scryer` records and the old `identities` list are not sent. Updates require successful startup identity initialization. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
+Every update sends the full startup name, including its suffix, in `metadata.v2meta.identity`, including discussion-only and test updates. Only the Starship footer hides the twelve-letter suffix (and legacy four-hex suffixes). Existing metadata is preserved; full `.scryer` records and the old `identities` list are not sent. Updates require successful startup identity initialization. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
 
 `.scryer` keeps action history separately. Action entries contain `name` and a `touched_at` list of UTC hours such as `2026-10-15T02Z`; old name-only entries remain readable. Startup does not add action entries. Automatic `.scryer` action-list maintenance is not implemented yet.
+
+## Identity registration
+
+Every startup/reload/resume registers with `POST /api/identities` at the interaction service:
+
+```json
+{
+  "name": "quiet_badger_abcdefghijkl",
+  "session": "pi-session:<Pi session ID>",
+  "location": "machine:thinkpad.tailnet.ts.net@/home/amanrai/Code/project",
+  "repo": "git@github.com/example/repo"
+}
+```
+
+- The session ID comes from Pi's runtime, including before the session file exists, and remains stable on resume. The existing producer UUID remains separate and unchanged.
+- Always send the current machine and absolute startup path, even with a repo. Tailscale machine names use the same hostname fallback as update folder metadata.
+- `repo` is optional. SSH/HTTPS/SCP remotes normalize to `git@host/owner/repo`, without credentials, query strings, a trailing slash or `.git`; GitHub path case is folded. Custom ports and case-sensitive paths on other hosts are retained. Local-only remotes/Git roots do not become portable repo keys.
+- The registry stores one optional repo, multiple sessions and deduplicated machine/path locations per identity. `201` creates an identity/session; `200` acknowledges an existing identity, including exact retries and repo/location updates. No collision renaming, ownership token, concurrency detection, or exclusivity constraint is introduced.
+- Registration runs in the background with a 10-second request timeout and ordinary 30-second retries. Updates proceed independently. Acknowledgment is only in memory; there is no `.scryer` registration-status field.
+- Git metadata is checked every 30 seconds and after successful Bash/edit/write results. A newly initialized repo becomes portable once an origin is available; discovery refreshes `.scryer` repo metadata and re-registers the same identity/session. Unchanged acknowledged payloads do not repeat HTTP requests, and temporary absence does not erase a known repo.
+- Shutdown/reload cancels pending registration and its timer. No existing identity is renamed or deleted.
 
 ## Folders in updates
 
@@ -44,7 +65,7 @@ Every update includes `metadata.v2meta.foldersTouched`, for example:
 
 ```json
 {
-  "identity": "quiet_badger_a7c9",
+  "identity": "quiet_badger_abcdefghijkl",
   "foldersTouched": ["thinkpad.tailnet.ts.net:/home/amanrai/Code/project/src"]
 }
 ```
@@ -85,7 +106,7 @@ PM integrations default to `http://smux-linode:43210` over Tailscale. The comms 
 
 The canonical local development checkout is `/Users/amanrai/Code/common-volume/repos/pi_extensions`. The installed Pi package remains at `~/.pi/agent/git/github.com/amanrai/pi_extensions`; publish changes and run `pi update git:github.com/amanrai/pi_extensions`, then `/reload` in the active Pi session.
 
-The comms extension defaults to `http://100.105.192.98:43217`. Override with `SCRYER_INTERACTIONS_URL` when needed. Its automatic interaction inference waits 30s by default; override startup default with `SCRYER_COMMS_INFERENCE_DELAY_MS` or current-session delay with `/comms-delay <seconds>`. Its semantic update inference runs in batches every 3 user turns by default; override startup default with `SCRYER_COMMS_UPDATE_BATCH_TURNS` or current-session batch size with `/comms-update-delay <turns>`.
+The comms extension defaults to `http://100.112.203.22:43217`. Override with `SCRYER_INTERACTIONS_URL` when needed. Its automatic interaction inference waits 30s by default; override startup default with `SCRYER_COMMS_INFERENCE_DELAY_MS` or current-session delay with `/comms-delay <seconds>`. Its semantic update inference runs in batches every 3 user turns by default; override startup default with `SCRYER_COMMS_UPDATE_BATCH_TURNS` or current-session batch size with `/comms-update-delay <turns>`.
 
 Comms also lazily writes emitted semantic updates to one Scryer PM task per Pi session under the `Agent Sessions` project. It updates the task `description_md` only, never per-update comments. Override project lookup with `SCRYER_SESSIONS_PROJECT_ID` or `SCRYER_SESSIONS_PROJECT_SLUG`; override task type with `SCRYER_SESSIONS_TASK_TYPE_ID`.
 

@@ -55,6 +55,11 @@ test("footer shows startup identity@folder and safely falls back to folder only"
   assert.equal(plain(footer.render(120)[0]), "calm_otter@~/workspace");
   await invoke("session_shutdown");
   for (const [name, display] of [
+    ["quiet_badger_abcdefghijkl", "quiet_badger"],
+    ["eager_elk_zzzzzzzzzzzz", "eager_elk"],
+    ["quiet_badger_abcdefghijk", "quiet_badger_abcdefghijk"],
+    ["quiet_badger_abcdefghijklm", "quiet_badger_abcdefghijklm"],
+    ["quiet_badger_ABCDEFGHIJKL", "quiet_badger_ABCDEFGHIJKL"],
     ["quiet_badger_a7c9", "quiet_badger"],
     ["eager_elk_0000", "eager_elk"],
     ["quiet_cafe", "quiet_cafe"], // A legacy noun that looks hexadecimal is not a suffix.
