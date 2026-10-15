@@ -6,7 +6,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { Type } from "typebox";
-import { initializeStartupIdentity, type StartupIdentity } from "./identity.ts";
+import { initializeStartupIdentity, updateIdentityMetadata, type StartupIdentity } from "./identity.ts";
 
 type InteractionChoice = { id: string; label: string; send?: string; custom?: boolean };
 type InteractionRequest = {
@@ -534,6 +534,8 @@ async function appendSessionTaskUpdate(ctx: ExtensionContext, update: SessionUpd
 
 async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext } = {}) {
   if (!producerFrom) throw new Error("comms not initialized");
+  if (!startupIdentity) throw new Error("Scryer startup identity is required for updates");
+  const metadata = updateIdentityMetadata(update.metadata, startupIdentity.name);
   const normalized = {
     kind: update.kind,
     title: update.title.trim().slice(0, 140),
@@ -549,13 +551,13 @@ async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "
   const createdAt = new Date().toISOString();
   await api("/api/updates", {
     method: "POST",
-    body: JSON.stringify({ id, from: producerFrom, ...normalized, metadata: update.metadata ?? {}, createdAt }),
+    body: JSON.stringify({ id, from: producerFrom, ...normalized, metadata, createdAt }),
   });
   lastUpdatePostAt = Date.now();
   lastUpdateHash = hash;
   const ctx = options.ctx ?? currentCtx;
   if (ctx) {
-    await appendSessionTaskUpdate(ctx, { id, from: producerFrom, ...normalized, metadata: update.metadata ?? {}, createdAt })
+    await appendSessionTaskUpdate(ctx, { id, from: producerFrom, ...normalized, metadata, createdAt })
       .catch((err) => logInference({ event: "session-task-error", updateId: id, error: err?.message ?? String(err) }));
   }
   return id;

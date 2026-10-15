@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { generateIdentityName, initializeStartupIdentity } from "../extensions/comms/identity.ts";
+import { generateIdentityName, initializeStartupIdentity, updateIdentityMetadata } from "../extensions/comms/identity.ts";
 
 const options = {
   environment: async () => ({ machine_name: "creator-machine", tailnet_name: "creator-tailnet" }),
@@ -119,6 +119,43 @@ for (const invalid of ["not json", "[]", '{"created_by":[{"name":"one"},{"name":
     assert.deepEqual(await readdir(directory), [".scryer"]);
   });
 }
+
+test("update metadata contains only the sender name and preserves existing fields", () => {
+  const metadata = {
+    source: "secondary-agent", token: 1, batch: true,
+    v2meta: { identity: "old_name", identities: [{ created_by: [] }], unrelated: true },
+  };
+  const before = JSON.stringify(metadata);
+  assert.deepEqual(updateIdentityMetadata(metadata, "impressed_harrier"), {
+    source: "secondary-agent", token: 1, batch: true,
+    v2meta: { identity: "impressed_harrier", unrelated: true },
+  });
+  assert.equal(JSON.stringify(metadata), before);
+});
+
+test("updates without prior metadata still carry the sender name", () => {
+  assert.deepEqual(updateIdentityMetadata(undefined, "quiet_badger"), {
+    v2meta: { identity: "quiet_badger" },
+  });
+});
+
+test("invalid prior v2meta is replaced, and an empty sender is rejected", () => {
+  for (const v2meta of [null, false, "invalid", []]) {
+    assert.deepEqual(updateIdentityMetadata({ v2meta }, "quiet_badger"), {
+      v2meta: { identity: "quiet_badger" },
+    });
+  }
+  assert.throws(() => updateIdentityMetadata({}, " "), /startup identity is required/);
+});
+
+test("startup preserves action entries with UTC hourly touch timestamps", async (t) => {
+  const directory = await fixture(t);
+  const touch = { name: "impressed_harrier", touched_at: ["2026-10-15T02Z"] };
+  await writeFile(join(directory, ".scryer"), JSON.stringify({ file_modifier: [touch] }));
+  const identity = await initializeStartupIdentity(directory, "pi-session:new", options);
+  assert.deepEqual(identity.record.file_modifier, [touch]);
+  assert.deepEqual((await record(directory)).file_modifier, [touch]);
+});
 
 test("generated names use adjective_noun without people's names", () => {
   for (let index = 0; index < 1000; index++) {

@@ -34,7 +34,9 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 
 Machine, tailnet, and repo fields are optional. Machine and tailnet record the creator's environment and are not replaced by later sessions. Repo detection uses the origin URL, or the local Git root if no origin exists; a later startup refreshes it when available. Creation time and session remain unchanged.
 
-Startup does not add entries to the action lists. Action tracking and `metadata.v2meta.identities` publishing are not implemented yet. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
+Every update sends the startup name in `metadata.v2meta.identity`, including discussion-only and test updates. Existing metadata is preserved; full `.scryer` records and the old `identities` list are not sent. Updates require successful startup identity initialization. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
+
+`.scryer` keeps action history separately. Action entries contain `name` and a `touched_at` list of UTC hours such as `2026-10-15T02Z`; old name-only entries remain readable. Startup does not add action entries. Automatic action tracking is not implemented yet.
 
 Tests: `node --experimental-strip-types --test tests/comms-identity.test.ts` (Node 22.19+).
 

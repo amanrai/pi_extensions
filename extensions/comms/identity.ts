@@ -17,11 +17,13 @@ export type CreatorIdentity = {
   [key: string]: unknown;
 };
 
+export type TouchIdentity = { name: string; touched_at: string[] };
+
 export type ScryerRecord = {
   created_by: CreatorIdentity[];
-  command_runner: string[];
-  file_modifier: string[];
-  "version-manager": string[];
+  command_runner: (string | TouchIdentity)[];
+  file_modifier: (string | TouchIdentity)[];
+  "version-manager": (string | TouchIdentity)[];
   [key: string]: unknown;
 };
 
@@ -44,6 +46,17 @@ const nounWords = nouns.filter((word) => /^[a-z]+$/.test(word));
 
 export function generateIdentityName() {
   return `${adjectiveWords[randomInt(adjectiveWords.length)]}_${nounWords[randomInt(nounWords.length)]}`;
+}
+
+/** Attach only the sender's name; never send the folder's identity lists. */
+export function updateIdentityMetadata(metadata: Record<string, unknown> | undefined, name: string) {
+  if (!name.trim()) throw new Error("Scryer startup identity is required for updates");
+  const previous = metadata?.v2meta;
+  const v2meta: Record<string, unknown> = previous && typeof previous === "object" && !Array.isArray(previous)
+    ? { ...previous as Record<string, unknown> }
+    : {};
+  delete v2meta.identities;
+  return { ...metadata, v2meta: { ...v2meta, identity: name } };
 }
 
 async function output(command: string, args: string[], cwd: string) {
@@ -85,8 +98,16 @@ function parseRecord(raw: string, path: string): ScryerRecord {
   }
   for (const role of ["command_runner", "file_modifier", "version-manager"]) {
     record[role] ??= [];
-    if (!Array.isArray(record[role]) || !record[role].every((name: unknown) => typeof name === "string" && name.trim())) {
-      throw new Error(`${path}: ${role} must be a list of names`);
+    if (!Array.isArray(record[role]) || !record[role].every((entry: unknown) => {
+      // Retain compatibility with files written before touch timestamps were added.
+      if (typeof entry === "string") return Boolean(entry.trim());
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+      const touch = entry as TouchIdentity;
+      return typeof touch.name === "string" && Boolean(touch.name.trim()) &&
+        Array.isArray(touch.touched_at) && touch.touched_at.every((hour) =>
+          typeof hour === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}Z$/.test(hour));
+    })) {
+      throw new Error(`${path}: ${role} requires names or name/touched_at entries`);
     }
   }
   return record;
