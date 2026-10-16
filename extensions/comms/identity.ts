@@ -19,6 +19,7 @@ export type CreatorIdentity = {
 };
 
 export type TouchIdentity = { name: string; touched_at: string[] };
+export type ActionRole = "command_runner" | "file_modifier" | "version-manager";
 
 export type ScryerRecord = {
   created_by: CreatorIdentity[];
@@ -177,6 +178,63 @@ async function writeRecord(path: string, record: ScryerRecord) {
     await rename(temporary, path);
   } finally {
     await unlink(temporary).catch((error) => { if (error.code !== "ENOENT") throw error; });
+  }
+}
+
+/** Persist observed actions, independently of semantic update/model selection. */
+export async function recordFolderActions(
+  actions: readonly { folder: string; role: ActionRole }[],
+  name: string,
+  session: string,
+  at = new Date().toISOString(),
+): Promise<void> {
+  if (!name.trim()) throw new Error("Scryer startup identity is required for attribution");
+  const hour = `${new Date(at).toISOString().slice(0, 13)}Z`;
+  const byFolder = new Map<string, Set<ActionRole>>();
+  for (const action of actions) {
+    const directory = resolve(action.folder);
+    const roles = byFolder.get(directory) ?? new Set<ActionRole>();
+    roles.add(action.role);
+    byFolder.set(directory, roles);
+  }
+  for (const [directory, roles] of byFolder) {
+    // A removed directory must never be recreated just to store attribution.
+    // Its surviving parent is normally provided by command target resolution.
+    try {
+      await withRecordLock(directory, async (path) => {
+        const record = await readRecord(path);
+        const before = JSON.stringify(record);
+        if (!record.created_by.length && !record.created_at) {
+          record.created_at = at;
+          record.session = session;
+        }
+        const root = await output("git", ["rev-parse", "--show-toplevel"], directory);
+        if (root) {
+          const remote = await output("git", ["config", "--get", "remote.origin.url"], directory);
+          const owner = record.created_by[0] ?? record;
+          owner.repo = normalizeGitRepo(remote) ?? root;
+        }
+        for (const role of roles) {
+          const entries = record[role];
+          const matching = entries.filter((entry) => (typeof entry === "string" ? entry : entry.name) === name);
+          const hours = new Set(matching.flatMap((entry) => typeof entry === "string" ? [] : entry.touched_at));
+          hours.add(hour);
+          // Upgrade legacy strings and merge any duplicate entries for this agent.
+          const entry = { name, touched_at: [...hours].sort() };
+          let inserted = false;
+          record[role] = entries.flatMap((previous) => {
+            if ((typeof previous === "string" ? previous : previous.name) !== name) return [previous];
+            if (inserted) return [];
+            inserted = true;
+            return [entry];
+          });
+          if (!inserted) record[role].push(entry);
+        }
+        if (JSON.stringify(record) !== before) await writeRecord(path, record);
+      });
+    } catch (error: any) {
+      if (error.code !== "ENOENT") throw error;
+    }
   }
 }
 

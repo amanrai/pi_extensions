@@ -1,4 +1,6 @@
 import { parse } from "shell-quote";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -188,9 +190,36 @@ function patchPaths(text: string, strip: number) {
   return paths;
 }
 
+const execFileAsync = promisify(execFile);
+
+export async function commitHead(folder: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--verify", "HEAD"], { cwd: folder, timeout: 2000 });
+    return stdout.trim();
+  } catch { return undefined; }
+}
+
+export async function snapshotCommits(command: string, cwd: string): Promise<Map<string, string | undefined>> {
+  const { commitFolders } = await commandAttribution(command, cwd);
+  return new Map(await Promise.all(commitFolders.map(async (folder) => [folder, await commitHead(folder)] as const)));
+}
+
+export async function confirmedCommits(before: ReadonlyMap<string, string | undefined>): Promise<Set<string>> {
+  const confirmed = new Set<string>();
+  for (const [folder, previous] of before) {
+    const current = await commitHead(folder);
+    if (current && current !== previous) confirmed.add(folder);
+  }
+  return confirmed;
+}
+
+export type CommandAttribution = { commandFolders: string[]; fileFolders: string[]; commitFolders: string[] };
+
 /** Initial command allowlist, not a general shell interpreter or filesystem audit. */
-export async function commandTouchedFolders(source: string, initialCwd: string): Promise<string[]> {
-  const folders = new Set<string>();
+export async function commandAttribution(source: string, initialCwd: string): Promise<CommandAttribution> {
+  const commandFolders = new Set<string>();
+  const fileFolders = new Set<string>();
+  const commitFolders = new Set<string>();
   let cwd = resolve(initialCwd);
   const lines = commandLines(source);
   // Unsupported control flow can skip later lines even when the overall tool succeeds.
@@ -199,7 +228,7 @@ export async function commandTouchedFolders(source: string, initialCwd: string):
     const previous = tokens[index - 1];
     const atStart = index === 0 || (typeof previous !== "string" && previous?.op && separators.has(previous.op));
     return atStart && ["if", "then", "else", "elif", "fi", "for", "while", "until", "case", "esac", "do", "done", "function", "{", "}"].includes(token);
-  }))) return [];
+  }))) return { commandFolders: [], fileFolders: [], commitFolders: [] };
   for (const tokens of lines) {
     const segments: { tokens: Token[]; separator?: string }[] = [];
     let segment: Token[] = [];
@@ -248,6 +277,7 @@ export async function commandTouchedFolders(source: string, initialCwd: string):
       }
       let executionCwd = cwd;
       let writes = false;
+      let commit = false;
       const targets: string[] = [];
       if (fileCommands.has(executable)) {
         writes = true;
@@ -297,26 +327,40 @@ export async function commandTouchedFolders(source: string, initialCwd: string):
           else if (["-c", "--git-dir", "--work-tree"].includes(args[index])) index += 2;
           else index++;
         }
-        writes ||= args[index] === "commit" && !args.includes("--dry-run");
+        commit = args[index] === "commit" && !args.includes("--dry-run");
+        writes ||= commit;
       }
       if (args.some((arg) => ["--help", "--version"].includes(arg)) ||
         (executable === "patch" && args.some((arg) => ["--dry-run", "--check"].includes(arg)))) {
         writes = false;
+        commit = false;
         targets.length = 0;
       }
       // Shell redirection happens in the shell's cwd, not a git -C directory.
       for (const target of outputs.filter((path) => !path.startsWith("/dev/"))) {
-        folders.add(cwd);
+        commandFolders.add(cwd);
         const folder = await targetFolder(target, cwd);
-        if (folder) folders.add(folder);
+        if (folder) fileFolders.add(folder);
       }
       if (!writes) continue;
-      folders.add(executionCwd);
+      commandFolders.add(executionCwd);
+      if (commit) commitFolders.add(executionCwd);
+      let resolvedTarget = false;
       for (const target of targets) {
         const folder = await targetFolder(target, executionCwd);
-        if (folder) folders.add(folder);
+        if (folder) { fileFolders.add(folder); resolvedTarget = true; }
       }
+      if (!commit && !resolvedTarget) fileFolders.add(executionCwd);
     }
   }
-  return [...folders].sort();
+  return {
+    commandFolders: [...commandFolders].sort(),
+    fileFolders: [...fileFolders].sort(),
+    commitFolders: [...commitFolders].sort(),
+  };
+}
+
+export async function commandTouchedFolders(source: string, initialCwd: string): Promise<string[]> {
+  const attribution = await commandAttribution(source, initialCwd);
+  return [...new Set([...attribution.commandFolders, ...attribution.fileFolders, ...attribution.commitFolders])].sort();
 }

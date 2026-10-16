@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { homedir } from "node:os";
-import { commandTouchedFolders } from "./commands.ts";
+import { commandAttribution } from "./commands.ts";
+import type { ActionRole } from "./identity.ts";
 
 export const FOLDER_TOUCH = "scryer-folder-touch";
 export const FOLDER_TOUCHES_SENT = "scryer-folder-touches-sent";
@@ -13,6 +14,7 @@ export type FolderTouch = {
   folders: string[];
   createdAt: string;
   codeChanged?: boolean;
+  actions?: { role: ActionRole; folder: string }[];
 };
 
 export async function observeFolderTouch(
@@ -24,17 +26,23 @@ export async function observeFolderTouch(
 ): Promise<FolderTouch | undefined> {
   if (isError) return undefined;
   let folders: string[] = [];
+  const actions: { role: ActionRole; folder: string }[] = [];
   let summary = "";
   if (["edit", "write"].includes(tool) && typeof input.path === "string") {
     const path = input.path.startsWith("~/") ? `${homedir()}/${input.path.slice(2)}` : input.path;
     folders = [dirname(resolve(cwd, path))];
+    actions.push({ role: "file_modifier", folder: folders[0] });
     summary = `${tool}: ${input.path}`;
   } else if (tool === "bash" && typeof input.command === "string") {
-    folders = await commandTouchedFolders(input.command, cwd);
+    const attribution = await commandAttribution(input.command, cwd);
+    actions.push(...attribution.commandFolders.map((folder) => ({ role: "command_runner" as const, folder })),
+      ...attribution.fileFolders.map((folder) => ({ role: "file_modifier" as const, folder })),
+      ...attribution.commitFolders.map((folder) => ({ role: "version-manager" as const, folder })));
+    folders = [...new Set(actions.map((action) => action.folder))].sort();
     summary = input.command;
   }
   if (!folders.length) return undefined;
-  return { id: randomUUID(), tool, summary: summary.slice(0, 800), folders, createdAt: new Date().toISOString(), codeChanged };
+  return { id: randomUUID(), tool, summary: summary.slice(0, 800), folders, createdAt: new Date().toISOString(), codeChanged, actions };
 }
 
 /** Branch-local custom entries survive reload/resume without replaying sent touches. */

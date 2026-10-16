@@ -8,10 +8,11 @@ import { homedir, hostname } from "node:os";
 import { Type } from "typebox";
 import { isDeepStrictEqual } from "node:util";
 import { beforeCodeChange, afterCodeChange, type ChangeSnapshot } from "./changes.ts";
+import { confirmedCommits, snapshotCommits } from "./commands.ts";
 import { windowActivity, idleTimers, type WindowActivity, type RecapDelivery, type RecapSender } from "./activity.ts";
 import { localRepoRoot } from "./repository.ts";
 import { RECAP_SYSTEM_PROMPT, prepareIdleRecap, prepareManualRecap, deliverRecap } from "./recaps.ts";
-import { detectRuntimeMachineName, initializeStartupIdentity, refreshStartupRepo, updateIdentityMetadata, type StartupIdentity } from "./identity.ts";
+import { detectRuntimeMachineName, initializeStartupIdentity, recordFolderActions, refreshStartupRepo, updateIdentityMetadata, type StartupIdentity } from "./identity.ts";
 import { startIdentityRegistration } from "./registration.ts";
 import { formatUpdateBody, extractJson } from "./updates.ts";
 import { FOLDER_TOUCH, FOLDER_TOUCHES_SENT, observeFolderTouch, pendingFolderTouches, selectUpdateFolders, type FolderTouch } from "./folders.ts";
@@ -103,6 +104,7 @@ let lifetime = new AbortController();
 let recapAbort: AbortController | undefined;
 let agentBusy = false;
 const changeSnapshots = new Map<string, ChangeSnapshot | undefined>();
+const commitSnapshots = new Map<string, Map<string, string | undefined>>();
 
 function userActivity() {
   activity?.touch();
@@ -411,6 +413,7 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   lifetime = new AbortController();
   agentBusy = false;
   changeSnapshots.clear();
+  commitSnapshots.clear();
   currentCtx = ctx;
   producerFrom = await ensureProducerFrom(ctx);
   startupIdentity = undefined;
@@ -979,6 +982,10 @@ export default function (pi: ExtensionAPI) {
     userActivity();
     try { changeSnapshots.set(event.toolCallId, await beforeCodeChange(event.toolName, event.input, ctx.cwd)); }
     catch { changeSnapshots.delete(event.toolCallId); }
+    if (event.toolName === "bash" && typeof event.input.command === "string") {
+      try { commitSnapshots.set(event.toolCallId, await snapshotCommits(event.input.command, ctx.cwd)); }
+      catch { commitSnapshots.delete(event.toolCallId); }
+    }
   });
   pi.on("tool_result", async (event, ctx) => {
     userActivity();
@@ -989,12 +996,20 @@ export default function (pi: ExtensionAPI) {
     try {
       const before = changeSnapshots.get(event.toolCallId);
       changeSnapshots.delete(event.toolCallId);
+      const commitsBefore = commitSnapshots.get(event.toolCallId);
+      commitSnapshots.delete(event.toolCallId);
       const codeChanged = !event.isError && await afterCodeChange(before);
       const touch = await observeFolderTouch(event.toolName, event.input, event.isError, ctx.cwd, codeChanged);
-      if (touch) pi.appendEntry(FOLDER_TOUCH, touch);
+      if (touch) {
+        pi.appendEntry(FOLDER_TOUCH, touch);
+        if (!startupIdentity) throw new Error("Startup identity is unavailable for attribution");
+        const commits = commitsBefore ? await confirmedCommits(commitsBefore) : new Set<string>();
+        const actions = (touch.actions ?? []).filter((action) => action.role !== "version-manager" || commits.has(action.folder));
+        await recordFolderActions(actions, startupIdentity.name, await sessionKey(ctx), touch.createdAt);
+      }
     } catch (err: any) {
       await logInference({ event: "folder-tracking-error", tool: event.toolName, error: err?.message ?? String(err) });
-      ctx.ui.notify("Scryer could not record folders for this tool result", "warning");
+      ctx.ui.notify("Scryer could not record folder attribution for this tool result", "warning");
     }
   });
   pi.on("input", async () => {
@@ -1027,7 +1042,7 @@ export default function (pi: ExtensionAPI) {
     maybeRunUpdateBatch(ctx);
     scheduleInference(ctx);
   });
-  pi.on("session_shutdown", async () => { cancelPendingInference("shutdown"); stopTimers(); changeSnapshots.clear(); currentCtx = undefined; activeModalRequestId = undefined; });
+  pi.on("session_shutdown", async () => { cancelPendingInference("shutdown"); stopTimers(); changeSnapshots.clear(); commitSnapshots.clear(); currentCtx = undefined; activeModalRequestId = undefined; });
 
   pi.registerCommand("comms-init", {
     description: "Reinitialize Scryer interaction comms producer and local TUI consumer",

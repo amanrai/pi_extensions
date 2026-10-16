@@ -65,7 +65,16 @@ Machine, tailnet, and repo fields are optional. `tailnet_name` is the creator ma
 
 Every update sends the full startup name, including its suffix, in `metadata.v2meta.identity`, including discussion-only and test updates. Only the Starship footer hides the twelve-letter suffix (and legacy four-hex suffixes). Existing metadata is preserved; full `.scryer` records and the old `identities` list are not sent. Updates require successful startup identity initialization. The existing producer UUID remains the session-routing identifier; its startup marker also exposes the identity name.
 
-`.scryer` keeps action history separately. Action entries contain `name` and a `touched_at` list of UTC hours such as `2026-10-15T02Z`; old name-only entries remain readable. Startup does not add action entries. Automatic `.scryer` action-list maintenance is not implemented yet.
+`.scryer` action history is maintained automatically from successful tool results, independently of model-generated updates. Entries use the session's startup identity and a deduplicated, sorted `touched_at` list of UTC hours such as `2026-10-15T02Z`. Legacy name-only entries are upgraded when that agent next touches the role; other agents and creator provenance are preserved. Startup alone does not add action entries.
+
+- `edit`/`write` add `file_modifier` in the file's containing folder, not `command_runner`.
+- Allowlisted state-changing Bash commands add `command_runner` in their execution folder (including recognized `cd`/`git -C`), and `file_modifier` in affected folders. When script targets cannot be resolved, execution-folder attribution is the fallback.
+- Git commits add `command_runner` and, only when before/after HEAD differs, `version-manager`. Commits alone do not add `file_modifier`. Recording occurs after success: the new provenance can be included in the next commit, without automatic amendments or extra commits.
+- Reads, read-only commands, failed tool results, help and dry-run commands do not add actions. The command allowlist is conservative, not an exhaustive shell interpreter or filesystem audit; unsupported control flow is skipped and concurrent external work is not ownership-policed.
+- Missing records in touched folders start with empty `created_by` and only the observed action lists, plus top-level `created_at`, `session`, and optional `repo`. No extra identity is generated outside startup. If a Pi session later starts there, it initializes the sole creator without discarding action history. Deleted folders are not recreated for bookkeeping.
+- Repo discovery refreshes the appropriate record when a repo becomes available. Cross-process lock files and atomic replacement protect read/modify/write; malformed records are never overwritten and errors are reported.
+
+Keep `.scryer` files checked into Git and use agent identity front matter in commit messages. Automatic attribution does not stage files, rewrite commit messages, install Git hooks, or commit on the user's behalf.
 
 ## Identity registration
 

@@ -109,6 +109,16 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   await invoke("message_end", { message: { role: "assistant", stopReason: "stop" } });
   await waitForBatch(3);
   const name = JSON.parse(await readFile(join(directory, ".scryer"), "utf8")).created_by[0].name;
+  for (const folder of ["first", "second"]) {
+    const attribution = JSON.parse(await readFile(join(directory, folder, ".scryer"), "utf8"));
+    assert.deepEqual(attribution.created_by, []);
+    assert.deepEqual(attribution.command_runner, []);
+    assert.deepEqual(attribution["version-manager"], []);
+    assert.equal(attribution.file_modifier.length, 1);
+    assert.equal(attribution.file_modifier[0].name, name);
+    assert.match(attribution.file_modifier[0].touched_at[0], /^\d{4}-\d{2}-\d{2}T\d{2}Z$/);
+  }
+  assert.deepEqual(JSON.parse(await readFile(join(directory, ".scryer"), "utf8")).command_runner, []);
   assert.equal(posts[0].metadata.v2meta.identity, name);
   assert.equal(posts[0].metadata.v2meta.foldersTouched.length, 1);
   assert.ok(posts[0].metadata.v2meta.foldersTouched[0].endsWith(`:${directory}/first`));
@@ -148,4 +158,16 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   for (let attempt = 0; attempt < 200 && registrations.length < 4; attempt++) await new Promise((done) => setTimeout(done, 10));
   assert.deepEqual(registrations[3], { ...registrations[2], repo: "git@github.com/example/project" });
   assert.equal(JSON.parse(await readFile(join(directory, ".scryer"), "utf8")).created_by[0].repo, "git@github.com/example/project");
+  const command = "git -c user.name=Test -c user.email=test@example.com commit --allow-empty -m test";
+  await invoke("tool_call", { toolCallId: "commit", toolName: "bash", input: { command } });
+  execFileSync("git", ["-C", directory, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "test"]);
+  await invoke("tool_result", { toolCallId: "commit", toolName: "bash", input: { command }, isError: false });
+  const committed = JSON.parse(await readFile(join(directory, ".scryer"), "utf8"));
+  assert.equal(committed["version-manager"][0].name, name);
+  assert.equal(committed.command_runner[0].name, name);
+  assert.deepEqual(committed.file_modifier, [], "Commits are not attributed as file edits");
+  // An overall successful shell result must not invent a second commit.
+  await invoke("tool_call", { toolCallId: "no-commit", toolName: "bash", input: { command } });
+  await invoke("tool_result", { toolCallId: "no-commit", toolName: "bash", input: { command }, isError: false });
+  assert.deepEqual(JSON.parse(await readFile(join(directory, ".scryer"), "utf8"))["version-manager"], committed["version-manager"]);
 });
