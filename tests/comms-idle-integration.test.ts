@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -134,12 +134,15 @@ test("Pi idle lifecycle flushes, spans sessions/reload, verifies full recaps, an
   assert.match(recapInputs[0].source, /Implementation B/);
   assert.doesNotMatch(recapInputs[0].source, /OTHER WINDOW/);
   const firstId = posts.find((row) => row.metadata.source === "idle-recap").id;
+  const changedGoals = [{ id: "80fcdba1-fefa-4126-82b6-851be04177cf", title: "Changed after first attempt" }];
+  await writeFile(join(directory, `.scryer-${session}`), JSON.stringify({ current: changedGoals, finish: [], complete: [], abandon: [] }));
   truncateReadback = false;
   await invoke("session_shutdown", { reason: "resume" });
   session = "session-c";
   branch = [];
   await load();
   await invoke("session_start", { reason: "resume" });
+  await writeFile(join(directory, `.scryer-${session}`), JSON.stringify({ current: changedGoals, finish: [], complete: [], abandon: [] }));
   await invoke("session_shutdown", { reason: "reload" });
   await load();
   await invoke("session_start", { reason: "reload" });
@@ -152,6 +155,8 @@ test("Pi idle lifecycle flushes, spans sessions/reload, verifies full recaps, an
   assert.ok(recaps.every((row) => row.title.startsWith("Idle Recap") && !row.body.includes("<coding>")));
   assert.equal(attempts.filter((id) => id === firstId).length, 2, "A lost acknowledgment retries the stable ID, not a duplicate row");
   assert.equal(history.pending.size, 0);
+  assert.deepEqual(recaps[0].metadata.v2meta.goals, [], "Retry retains original Goal snapshot after session/Goal changes");
+  assert.deepEqual(recaps[1].metadata.v2meta.goals, changedGoals, "A new part uses its original sender session file at publication time");
   terminalInput!();
   t.mock.timers.tick(RECAP_IDLE_MS); await drain();
   assert.equal(posts.filter((row) => row.metadata.source === "idle-recap").length, 2, "No work means no repeated recap");

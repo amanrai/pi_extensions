@@ -1,4 +1,5 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { withFileMutationQueue, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { goalMetadata, goalOperations, initializeGoalFile, sessionGoalPath, transitionGoal } from "./goals.ts";
 import { complete, type UserMessage } from "@earendil-works/pi-ai";
 import { Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { createHash, randomUUID } from "node:crypto";
@@ -428,6 +429,11 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
     await logInference({ event: "identity-startup-error", error });
   }
   activeSession = await sessionKey(ctx);
+  try {
+    const path = sessionGoalPath(ctx);
+    await initializeGoalFile(path);
+    pi.sendMessage({ customType: "scryer-session-goals", content: `Session Goal file: ${path}. Use goal_start, goal_finish, goal_complete and goal_abandon to manage mutually exclusive current, finish, complete and abandon lists. These tools do not update the PM system.`, display: false });
+  } catch (error: any) { warnGoals(ctx, `Session Goal initialization failed: ${error?.message ?? String(error)}`); }
   activity = windowActivity(ctx.sessionManager);
   recapRepo = await localRepoRoot(ctx.cwd);
   recapScope = `${machineName}:${recapRepo}`;
@@ -600,19 +606,34 @@ async function appendSessionTaskUpdate(ctx: ExtensionContext, update: SessionUpd
   await logInference({ event: "session-task-updated", taskId, updateId: update.id, kind: update.kind });
 }
 
-async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext; foldersTouched?: string[]; coding?: boolean; id?: string; fullBody?: boolean; verify?: boolean; signal?: AbortSignal; sender?: RecapSender; createdAt?: string } = {}) {
+function warnGoals(ctx: ExtensionContext | undefined, message: string) {
+  if (ctx?.hasUI) ctx.ui.notify(message, "warning");
+  else console.error(message);
+  void logInference({ event: "goal-tracking-warning", message }).catch(() => {});
+}
+
+async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "createdAt" | "receivedAt">, options: { force?: boolean; ctx?: ExtensionContext; foldersTouched?: string[]; coding?: boolean; id?: string; fullBody?: boolean; verify?: boolean; signal?: AbortSignal; sender?: RecapSender; createdAt?: string; transition?: boolean; goals?: { id: string; title: string }[] } = {}) {
   if (!producerFrom && !options.sender) throw new Error("comms not initialized");
   if (!startupIdentity && !options.sender) throw new Error("Scryer startup identity is required for updates");
   const from = options.sender?.from ?? producerFrom!;
   const ctx = options.ctx ?? currentCtx;
-  const metadata = updateIdentityMetadata(update.metadata, options.sender?.identity ?? startupIdentity!.name, options.foldersTouched);
+  let metadata: Record<string, unknown> = updateIdentityMetadata(update.metadata, options.sender?.identity ?? startupIdentity!.name, options.foldersTouched);
+  try {
+    if (!ctx) throw new Error("Main Pi session context unavailable");
+    metadata = options.goals
+      ? { ...metadata, v2meta: { ...(metadata.v2meta as Record<string, unknown>), goals: options.goals } }
+      : await goalMetadata(options.sender?.goalPath ?? sessionGoalPath(ctx), metadata, message => warnGoals(ctx, message));
+  } catch (error: any) {
+    warnGoals(ctx, `Scryer Goal attribution failed: ${error?.message ?? String(error)}; sending goals: []`);
+    metadata = { ...metadata, v2meta: { ...(metadata.v2meta as Record<string, unknown>), goals: [] } };
+  }
   const normalized = {
     kind: update.kind,
     title: update.title.trim().slice(0, 140),
     body: formatUpdateBody(update.body, options.coding, options.fullBody ? Infinity : undefined),
     level: update.level,
   };
-  if (!normalized.title || !normalized.body) throw new Error("update title and body required");
+  if ((!normalized.title || !normalized.body) && !options.transition) throw new Error("update title and body required");
   const hash = updateHash(normalized);
   const important = update.kind === "blocked" || update.kind === "error" || update.kind === "done" || update.kind === "waiting";
   if (!options.force && hash === lastUpdateHash) return undefined;
@@ -630,9 +651,11 @@ async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "
   }
   if (options.verify) await verifyStoredUpdate(payload, options.signal);
   options.signal?.throwIfAborted();
-  lastUpdatePostAt = Date.now();
-  lastUpdateHash = hash;
-  if (ctx) {
+  if (!options.transition) {
+    lastUpdatePostAt = Date.now();
+    lastUpdateHash = hash;
+  }
+  if (ctx && !options.transition) {
     await appendSessionTaskUpdate(ctx, payload, options.sender?.task)
       .catch((err) => logInference({ event: "session-task-error", updateId: id, error: err?.message ?? String(err) }));
   }
@@ -652,18 +675,23 @@ async function verifyStoredUpdate(update: SessionUpdate, signal?: AbortSignal) {
 
 async function sendRecap(ctx: ExtensionContext, history: WindowActivity, delivery: RecapDelivery, signal: AbortSignal) {
   if (!producerFrom || !startupIdentity) throw new Error("Scryer startup identity is required for recaps");
-  const sender = delivery.sender ??= { from: producerFrom, identity: startupIdentity.name, machine: machineName, repo: recapRepo,
+  const sender = delivery.sender ??= { from: producerFrom, identity: startupIdentity.name, machine: machineName, repo: recapRepo, goalPath: sessionGoalPath(ctx),
     task: { key: activeSession, title: sessionTaskTitle(ctx), description: initialSessionDescription(ctx, activeSession) } };
   const { machine, repo } = sender;
   await deliverRecap(history, delivery, async (part, index) => {
     signal.throwIfAborted();
     part.createdAt ??= new Date().toISOString();
+    // A stable recap ID must retain its first-attempt metadata on retry/readback.
+    if (!part.goals) {
+      const snapshot = await goalMetadata(sender.goalPath ?? sessionGoalPath(ctx), {}, message => warnGoals(ctx, message));
+      part.goals = (snapshot.v2meta as { goals: { id: string; title: string }[] }).goals;
+    }
     await createSessionUpdate({
       kind: "progress", title: part.title, body: part.body, level: "info",
       metadata: { source: delivery.source, recapId: delivery.id, part: index + 1, parts: delivery.parts.length,
         windowId: history.id, machine, repo, rangeStart: new Date(delivery.start).toISOString(),
         rangeEnd: new Date(delivery.end).toISOString(), throughSequence: delivery.through },
-    }, { force: true, ctx, id: part.id, fullBody: true, verify: true, coding: false, signal, sender, createdAt: part.createdAt });
+    }, { force: true, ctx, id: part.id, fullBody: true, verify: true, coding: false, signal, sender, createdAt: part.createdAt, goals: part.goals });
   });
   await logInference({ event: "recap-delivered", recapId: delivery.id, source: delivery.source, parts: delivery.parts.length, through: delivery.through });
 }
@@ -703,8 +731,13 @@ async function runIdleRecap(ctx: ExtensionContext) {
 
 async function recentUpdates(limit = 5) {
   if (!producerFrom) return [] as SessionUpdate[];
-  const data = await api<{ updates: SessionUpdate[] }>(`/api/updates?from=${encodeURIComponent(producerFrom)}&limit=${limit}`);
-  return data.updates;
+  // Metadata-only events must not displace the observer's previous reports.
+  for (let size = limit; ; size = Math.min(500, size * 2)) {
+    const data = await api<{ updates: SessionUpdate[] }>(`/api/updates?from=${encodeURIComponent(producerFrom)}&limit=${size}`);
+    const reports = data.updates.filter(update => !(update.title === "" && update.body === "" &&
+      Object.keys(goalOperations).some(field => Boolean((update.metadata?.v2meta as Record<string, unknown>)?.[field]))));
+    if (reports.length >= limit || data.updates.length < size || size === 500) return reports.slice(-limit);
+  }
 }
 
 async function createTestRequest(ctx: ExtensionContext) {
@@ -933,6 +966,21 @@ async function forceSemanticUpdateFlush(ctx: ExtensionContext) {
 
 export default function (pi: ExtensionAPI) {
   publishCommsStatus();
+  for (const operation of Object.keys(goalOperations) as (keyof typeof goalOperations)[]) {
+    pi.registerTool({
+      name: operation, label: operation,
+      description: `Move a Goal exclusively to the session file's ${goalOperations[operation]} list. Mechanical local tracking only; does not update PM records. Emits a content-free comms event only on membership change.`,
+      parameters: Type.Object({ id: Type.String({ description: "Goal UUID" }), title: Type.Optional(Type.String({ description: "Goal title if known; retained on later moves. UUID is used when unknown; no PM lookup." })) }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const path = sessionGoalPath(ctx);
+        const result = await withFileMutationQueue(path, () => transitionGoal(path, operation, params.id, params.title, async (field, id) => {
+          await createSessionUpdate({ kind: "progress", title: "", body: "", metadata: { v2meta: { [field]: id } } }, { force: true, ctx, transition: true });
+        }));
+        if (result.eventError) warnGoals(ctx, `Goal moved locally, but transition event delivery failed: ${result.eventError}. Repeating the same operation is a no-op and will not resend.`);
+        return { content: [{ type: "text", text: `${result.changed ? "Moved" : "Already in"} ${params.id}: ${goalOperations[operation]} (${path})${result.eventError ? `; event delivery failed: ${result.eventError}` : ""}` }], details: { path, ...result } };
+      },
+    });
+  }
   pi.registerTool({
     name: "send_recap",
     label: "Send Recap",

@@ -5,9 +5,9 @@ export const RECAP_IDLE_MS = 30 * 60_000;
 export const RECAP_LOOKBACK_MS = 12 * 60 * 60_000;
 
 export type Activity = { sequence: number; at: number; scope: string; session: string; role: string; text: string };
-export type RecapPart = { id: string; title: string; body: string; verified?: boolean; createdAt?: string };
+export type RecapPart = { id: string; title: string; body: string; verified?: boolean; createdAt?: string; goals?: { id: string; title: string }[] };
 export type RecapSender = {
-  from: string; identity: string; machine: string; repo: string;
+  from: string; identity: string; machine: string; repo: string; goalPath?: string;
   task: { key: string; title: string; description: string };
 };
 export type RecapDelivery = {

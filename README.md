@@ -14,6 +14,23 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 - `starship-footer.ts` — Starship-powered footer with `agent_name@folder` from the startup `.scryer`, PR link, model, thinking level, tokens, and Codex subscription-aware cost display.
 - `pi-codex-account` — bundled third-party `/codex` account-profile commands for saving, switching, and checking usage of named OpenAI Codex logins.
 
+## Session Goal tracking
+
+The comms extension creates `.scryer-<main-Pi-session-id>` in the session header's startup directory, with empty `current`, `finish`, `complete`, and `abandon` arrays. Resume/reload preserves existing data; other sessions' files (including checked-in ones) are ignored. A context message supplies the exact path. Files may be committed. This state is session-wide, not rolled back on `/tree`.
+
+Tools accept `{ "id": "GOAL_UUID", "title": "optional known title" }`:
+
+- `goal_start` → `current`.
+- `goal_finish` → `finish` (no longer working on it).
+- `goal_complete` → `complete` (Goal accomplished).
+- `goal_abandon` → `abandon`.
+
+A transition removes that UUID from every list and puts it only in the destination. No-op calls emit nothing. Writes are serialized and atomically published. Tools do not decide intent or update PM records. Titles are retained on moves; an unknown title uses the UUID, without a PM lookup. Missing/invalid files are not silently repaired by tools.
+
+Every update includes `metadata.v2meta.goals`, copied from `current` at publication time, not inferred from narrative. Missing/invalid/unreadable files warn visibly (stderr outside UI mode) and send `goals: []` without blocking delivery/session. Recap retries retain each part's first-attempt snapshot so stable-ID readback still works. Identity and other metadata are preserved. Observer prompts, schedule and independent reporting remain unchanged.
+
+Actual transitions additionally publish content-free `progress` events with one of `metadata.v2meta.goal_start`, `goal_finish`, `goal_complete`, or `goal_abandon` set to the UUID. They bypass observer inference, semantic-update throttling and PM session-note mirroring. **The interactions service must support empty title/body on valid transition events** (companion scryer-interactions change). If delivery fails, the local move remains committed and a warning/tool result reports the failure. No durable event outbox or exactly-once guarantee is provided; retrying the unchanged move does not resend.
+
 ## Goal-oriented startup
 
 Run `pi --goal` to have the agent announce its name from the startup folder's `.scryer` creator identity as a friendly name (for example, `Impressed Harrier`, without the random suffix), identify its startup directory, and ask which Goal to orient to. The extension composes the reviewed startup prompt in `extensions/goal-orientation/prompts.ts` and sends it as an extension-authored context message that triggers one model turn. Read-only Git discovery supplies the repository root, origin remote (with URL credentials/query tokens removed), and startup folder relative to that root. No repository or no origin is reported explicitly; these facts do not assign a project or Goal. It does not impersonate user input, prefetch Goals, write Goal associations, or authorize execution. The prompt explains where JEPM Goals live and how to retrieve them; numbered open-Goal lists are offered only if asked and reflect recorded relationships through indented hierarchical labels (for example, `1. Fix Loom` and `1.a. Focus Mode`). Users can select by these labels without seeing UUIDs. After Goal selection, the prompt instructs the agent to send an interaction-service update containing its name and the selected Goal's title and UUID. This reporting is a prompt instruction, not an automatic selection detector. Planning is distinct from execution: the agent offers collaborative checklist planning when no open todo list exists, and ordinary execution requires an approved checklist. An explicit user request may authorize work without a pre-existing checklist; the agent then records what it does in that Goal's checklist, creating it if necessary, without expanding the authorized scope. Missing/invalid startup identities produce a warning instead of an invented name or parent-folder fallback. The resulting conversation requires the normal model/provider configuration.

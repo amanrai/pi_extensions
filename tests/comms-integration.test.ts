@@ -170,4 +170,31 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
   await invoke("tool_call", { toolCallId: "no-commit", toolName: "bash", input: { command } });
   await invoke("tool_result", { toolCallId: "no-commit", toolName: "bash", input: { command }, isError: false });
   assert.deepEqual(JSON.parse(await readFile(join(directory, ".scryer"), "utf8"))["version-manager"], committed["version-manager"]);
+
+  // Exercise real registered tools and the shared publisher, not just helpers.
+  const goalId = "80fcdba1-fefa-4126-82b6-851be04177cf";
+  for (const operation of ["goal_start", "goal_finish", "goal_complete", "goal_abandon"]) {
+    const tool = extension.tools.get(operation).definition;
+    const before = posts.length;
+    const result = await tool.execute("goal", { id: goalId, title: "Filter updates" }, undefined, undefined, ctx);
+    assert.equal(result.details.changed, true);
+    assert.equal(posts.length, before + 1);
+    const event = posts.at(-1);
+    assert.equal(event.title, "");
+    assert.equal(event.body, "");
+    assert.equal(event.metadata.v2meta[operation], goalId);
+    assert.equal(event.metadata.v2meta.identity, name);
+    assert.deepEqual(event.metadata.v2meta.goals, operation === "goal_start" ? [{ id: goalId, title: "Filter updates" }] : []);
+    await tool.execute("goal-again", { id: goalId }, undefined, undefined, ctx);
+    assert.equal(posts.length, before + 1, "No-op emits no event");
+  }
+  assert.deepEqual(posts[0].metadata.v2meta.goals, []);
+  const goalPath = join(directory, `.scryer-${activeSessionId}`);
+  await writeFile(goalPath, "invalid JSON");
+  await extension.commands.get("comms-test-update").handler("", ctx);
+  assert.deepEqual(posts.at(-1).metadata.v2meta.goals, []);
+  assert.equal(posts.at(-1).title, "Comms update test");
+  await rm(goalPath);
+  await extension.commands.get("comms-test-update").handler("", ctx);
+  assert.deepEqual(posts.at(-1).metadata.v2meta.goals, []);
 });
