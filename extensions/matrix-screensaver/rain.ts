@@ -25,7 +25,7 @@ export class MatrixRain implements Component {
     return {
       head: initial ? this.random() * height : -1 - this.random() * height * 0.8,
       length: Math.max(3, Math.floor(height * (0.2 + this.random() * 0.55))),
-      speed: 0.3 + this.random() * 0.7,
+      speed: (0.3 + this.random() * 0.7) * 1.5,
       glyphs: Array.from({ length: height }, () => this.glyph()),
     };
   }

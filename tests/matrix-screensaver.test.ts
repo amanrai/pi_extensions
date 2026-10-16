@@ -30,6 +30,16 @@ test("rain animation changes frames while rendering itself is stable", () => {
   assert.ok(rain.render(40).every((line) => plain(line).length === 40));
 });
 
+test("rain falls 1.5 times faster without increasing the frame cadence", () => {
+  const rain = new MatrixRain(() => 20, () => 0.5);
+  const headRow = () => rain.render(1).findIndex((line) => line.includes("\x1b[22;1;37m"));
+  assert.equal(headRow(), 10);
+  for (let i = 0; i < 4; i++) rain.tick();
+  // Midpoint stream: 0.65 * 1.5 rows/tick, so 10 + 4 * 0.975 = 13.9.
+  assert.equal(headRow(), 13);
+  assert.equal(MATRIX_FRAME_MS, 80);
+});
+
 test("rain handles narrow terminals, resizing, and zero dimensions", () => {
   let rows = 12;
   const rain = new MatrixRain(() => rows, random());
