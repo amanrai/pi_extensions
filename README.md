@@ -7,11 +7,18 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 - `scryer/` — Scryer PM context, project/ticket selection (`/pp <project_id>`, `/tp <ticket_id>` with picker fallback), `/save`, `/update`, `/deets`, and recorder autosave.
 - `comms/` — Scryer interaction-service producer/consumer: emits producer markers, polls interaction requests/responses, and renders cockpit-style TUI prompts.
 - `matrix-screensaver/` — optional native Matrix rain after one minute idle; always starts disabled. Enable with `/matrix on`, stop with `/matrix off`.
+- `goal-orientation/` — `pi --goal` starts an interactive Goal-orientation conversation using the reviewed wording in `prompts.ts`; ordinary startup is unchanged.
 - `read-md.ts` — `/read [path]` and `ctrl+k` Markdown picker/viewer for human reading, no LM context injection.
 - `smart-status.ts` — `/status` command with model/context/session usage and Codex quota bars.
 - `switch-to.ts` — `/switchTo` command to pick a session for the current folder and resume from a tree point.
 - `starship-footer.ts` — Starship-powered footer with `agent_name@folder` from the startup `.scryer`, PR link, model, thinking level, tokens, and Codex subscription-aware cost display.
 - `pi-codex-account` — bundled third-party `/codex` account-profile commands for saving, switching, and checking usage of named OpenAI Codex logins.
+
+## Goal-oriented startup
+
+Run `pi --goal` to have the agent identify its startup directory and ask which Goal to orient to. The extension composes the reviewed startup prompt in `extensions/goal-orientation/prompts.ts` and sends it as an extension-authored context message that triggers one model turn. It does not impersonate user input, prefetch Goals, write Goal associations, or authorize execution. The prompt explains where JEPM Goals live and how to retrieve them; numbered open-Goal lists are offered only if asked. The resulting conversation requires the normal model/provider configuration.
+
+Plain `pi` does nothing extra. `/reload` and in-process saved-session switches do not replay the startup request. This initial trial is interactive-only; `--orient` and `--do` are not implemented yet.
 
 ## Matrix idle screensaver
 

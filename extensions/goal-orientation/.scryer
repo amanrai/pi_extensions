@@ -1,0 +1,16 @@
+{
+  "created_by": [],
+  "command_runner": [],
+  "file_modifier": [
+    {
+      "name": "impressed_harrier",
+      "touched_at": [
+        "2026-10-16T04Z"
+      ]
+    }
+  ],
+  "version-manager": [],
+  "created_at": "2026-10-16T04:04:00.186Z",
+  "session": "pi-session:01a14278-67bb-7319-b5b4-1653f2abc27a",
+  "repo": "git@github.com/amanrai/pi_extensions"
+}
