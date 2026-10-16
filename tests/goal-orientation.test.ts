@@ -19,6 +19,13 @@ test("startup prompt retains the user-reviewed wording and actual directory", ()
   assert.ok(prompt.includes("Do not render the uuids"));
   assert.ok(prompt.includes("may select multiple goals"));
   assert.ok(prompt.includes("Once the user selects a goal, send an update to the interaction service with your name and both the title and the uuid of the goal you have been selected to work on"));
+  assert.ok(prompt.includes("Planning a Goal is different from working on it"));
+  assert.ok(prompt.includes("normally requires an approved checklist"));
+  assert.ok(prompt.includes("If no open todo list is available, offer to build one collaboratively"));
+  assert.ok(prompt.includes("A checklist's existence does not by itself mean the user has approved it"));
+  assert.ok(prompt.includes("The user may explicitly ask you to do something without a pre-existing checklist; that is okay"));
+  assert.ok(prompt.includes("keep adding what you do to a checklist within the selected Goal. Create the checklist if necessary"));
+  assert.ok(prompt.includes("Recording the work does not authorize additional work"));
   assert.ok(prompt.includes("You may not execute any work until explicitly authorized by the user"));
   assert.ok(!prompt.includes("The user started Pi with"));
   assert.ok(!prompt.includes("When the user supplies a Goal UUID"));
