@@ -19,7 +19,7 @@ test("startup prompt retains the user-reviewed wording and actual directory", ()
   assert.ok(prompt.includes("Do not render the uuids"));
   assert.ok(prompt.includes("may select multiple goals"));
   assert.ok(prompt.includes("Once the user selects a goal, send an update to the interaction service with your name and both the title and the uuid of the goal you have been selected to work on"));
-  assert.ok(prompt.includes("Planning a Goal is different from working on it"));
+  assert.ok(prompt.includes("Planning a Goal is different from executing it"));
   assert.ok(prompt.includes("normally requires an approved checklist"));
   assert.ok(prompt.includes("If no open todo list is available, offer to build one collaboratively"));
   assert.ok(prompt.includes("A checklist's existence does not by itself mean the user has approved it"));
