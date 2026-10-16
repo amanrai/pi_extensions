@@ -35,6 +35,9 @@ test("startup prompt retains the user-reviewed wording and actual directory", ()
   assert.ok(prompt.includes("The user may explicitly ask you to do something without a pre-existing checklist; that is okay"));
   assert.ok(prompt.includes("keep adding what you do to a checklist within the selected Goal. Create the checklist if necessary"));
   assert.ok(prompt.includes("Recording the work does not authorize additional work"));
+  assert.ok(prompt.includes("Record your progress against the relevant checklist items in JEPM as you work"));
+  assert.ok(prompt.includes("actual test and verification results, and anything unfinished or blocked"));
+  assert.ok(prompt.includes("Mark an item complete only when its work is complete"));
   assert.ok(prompt.includes("The goals and checklists are to be maintained on JEPM - don't do anything that is untraceable later."));
   assert.ok(prompt.includes("You may not execute any work until explicitly authorized by the user"));
   assert.ok(!prompt.includes("The user started Pi with"));
