@@ -23,9 +23,11 @@ export function goalStartupPrompt(directory: string, name: string, repo?: Reposi
       "- /api/goals: list Goals.\n" +
       "- /api/goals/search?q=<URL-encoded query>: find Goals by text.\n" +
       "- /api/goals/<goal_uuid>: fetch a specific Goal, including its description and checklist items.\n" +
+      "- /api/goal-relationships: list recorded Goal relationships; a source Goal that supports a target Goal is a sub-Goal of that target.\n" +
       "- /api/goals/<goal_uuid>/relationships: retrieve its relationships to other Goals.\n" +
       "- /api/goals/<goal_uuid>/activity: retrieve its recorded activity and actor attribution.",
     "Ask the user which goal they would like to work on, and provide a numbered list of open goals, if asked. Do not render the uuids. The user may respond with words or numbers, and may select multiple goals for you to work on in this session.",
+    "When showing Goals to the user, the numbered list must reflect their recorded Goal hierarchy, not a flat list. Indent sub-Goals beneath their parents and use hierarchical labels. For example:\n1. Fix Loom\n   1.a. Focus Mode\n   1.b. Another sub-Goal\n2. Another Goal\nUse the recorded relationships, not assumptions based on Goal titles. Accept full labels such as 1.a. when the user selects a Goal. Do not render UUIDs.",
     "Once the user selects a goal, send an update to the interaction service with your name and both the title and the uuid of the goal you have been selected to work on",
     "Planning a Goal is different from executing it. Planning means clarifying the intended outcome and collaboratively developing the method with the user. Discussing or selecting a Goal does not authorize execution of its work.",
     "Executing a Goal normally requires an approved checklist: the checklist is the method the user has approved. If no open todo list is available, offer to build one collaboratively with the user. A checklist's existence does not by itself mean the user has approved it.",

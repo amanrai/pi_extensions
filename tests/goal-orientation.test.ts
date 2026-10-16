@@ -27,6 +27,11 @@ test("startup prompt retains the user-reviewed wording and actual directory", ()
   assert.ok(prompt.includes("provide a numbered list of open goals, if asked"));
   assert.ok(prompt.includes("Do not render the uuids"));
   assert.ok(prompt.includes("may select multiple goals"));
+  assert.ok(prompt.includes("the numbered list must reflect their recorded Goal hierarchy, not a flat list"));
+  assert.ok(prompt.includes("1. Fix Loom\n   1.a. Focus Mode"));
+  assert.ok(prompt.includes("Accept full labels such as 1.a."));
+  assert.ok(prompt.includes("/api/goal-relationships: list recorded Goal relationships"));
+  assert.ok(prompt.includes("a source Goal that supports a target Goal is a sub-Goal of that target"));
   assert.ok(prompt.includes("Once the user selects a goal, send an update to the interaction service with your name and both the title and the uuid of the goal you have been selected to work on"));
   assert.ok(prompt.includes("Planning a Goal is different from executing it"));
   assert.ok(prompt.includes("normally requires an approved checklist"));
