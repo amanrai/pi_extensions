@@ -1,7 +1,14 @@
+/** Human-facing introduction only; stored attribution keeps the full identity. */
+export function introductionName(name: string): string {
+  return name.replace(/^([a-z]+_[a-z]+)_(?:[a-z0-9]{12}|[a-f0-9]{4})$/i, "$1")
+    .split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
+}
+
 /** Startup wording for the opt-in --goal conversation. */
 export function goalStartupPrompt(directory: string, name: string): string {
   return [
     `Your startup identity name is ${JSON.stringify(name)}.`,
+    `When introducing yourself, use ${JSON.stringify(introductionName(name))}. Keep your full startup identity name, including any suffix, in records and interaction-service updates.`,
     `The startup directory is ${JSON.stringify(directory)}.`,
     "Begin by telling the user your name and where you are, and asking: \"Is there a Goal you'd like me to orient to?\"",
     "The user maintains Goals in JEPM, the work-management component of Scryer. The JEPM API is located at http://smux-linode:43210.",

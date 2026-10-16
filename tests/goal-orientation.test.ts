@@ -4,13 +4,22 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { test } from "node:test";
-import { goalStartupPrompt } from "../extensions/goal-orientation/prompts.ts";
+import { goalStartupPrompt, introductionName } from "../extensions/goal-orientation/prompts.ts";
+
+test("introductions use friendly capitalized names without random suffixes", () => {
+  for (const name of ["impressed_harrier", "impressed_harrier_abcdefghijkl", "impressed_harrier_a1b2c3d4e5f6", "impressed_harrier_a7c9"]) {
+    assert.equal(introductionName(name), "Impressed Harrier");
+  }
+  assert.equal(introductionName("printed_swordtail"), "Printed Swordtail");
+});
 
 test("startup prompt retains the user-reviewed wording and actual directory", () => {
   const cwd = '/work/a folder/"quoted"';
   const name = "quiet_otter_abcdefghijkl";
   const prompt = goalStartupPrompt(cwd, name);
   assert.ok(prompt.includes(JSON.stringify(name)));
+  assert.ok(prompt.includes('When introducing yourself, use "Quiet Otter"'));
+  assert.ok(prompt.includes("Keep your full startup identity name, including any suffix, in records and interaction-service updates"));
   assert.ok(prompt.includes("telling the user your name and where you are"));
   assert.ok(prompt.includes(JSON.stringify(cwd)));
   assert.ok(prompt.includes("http://smux-linode:43210"));
