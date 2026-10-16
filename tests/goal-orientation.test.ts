@@ -60,20 +60,41 @@ test("Pi --goal starts one extension-authored turn; ordinary startup and reload 
     assert.deepEqual([...extension.flags.keys()], ["goal"], "Unfinished execution modes are not advertised");
     loaded.runtime.flagValues.set("goal", enabled);
     const messages: any[] = [], warnings: string[] = [];
+    const workingMessages: (string | undefined)[] = [], workingVisibility: boolean[] = [];
     loaded.runtime.sendMessage = (message: any, options: any) => messages.push({ message, options });
     loaded.runtime.sendUserMessage = () => assert.fail("Do not impersonate user input");
-    const ctx = { cwd, mode, ui: { notify: (text: string) => warnings.push(text) } };
-    const start = async (reason: string) => {
-      for (const handler of extension.handlers.get("session_start") ?? []) await handler({ type: "session_start", reason }, ctx);
+    const ctx = { cwd, mode, ui: {
+      notify: (text: string) => warnings.push(text),
+      setWorkingMessage: (message?: string) => workingMessages.push(message),
+      setWorkingVisible: (visible: boolean) => workingVisibility.push(visible),
+    } };
+    const invoke = async (event: string, data: any = {}) => {
+      for (const handler of extension.handlers.get(event) ?? []) await handler({ type: event, ...data }, ctx);
     };
-    return { start, messages, warnings };
+    const start = (reason: string) => invoke("session_start", { reason });
+    return { start, invoke, messages, warnings, workingMessages, workingVisibility };
   };
   const normal = await load();
   await normal.start("startup");
   assert.deepEqual(normal.messages, []);
+  await normal.invoke("before_provider_request");
+  await normal.invoke("agent_settled");
+  assert.deepEqual(normal.workingMessages, []);
+  assert.deepEqual(normal.workingVisibility, []);
   const active = await load(true);
   await active.start("startup");
   assert.equal(active.messages.length, 1);
+  assert.deepEqual(active.workingMessages, ["Orienting…"]);
+  assert.deepEqual(active.workingVisibility, [true]);
+  await active.invoke("before_provider_request");
+  assert.deepEqual(active.workingVisibility, [true, true], "Show the native loader once startup streaming begins");
+  await active.invoke("agent_settled");
+  assert.deepEqual(active.workingMessages, ["Orienting…", undefined]);
+  assert.deepEqual(active.workingVisibility, [true, true, false, true], "Clear the orientation loader and restore default visibility");
+  await active.invoke("before_provider_request");
+  await active.invoke("agent_settled");
+  await active.invoke("session_shutdown");
+  assert.equal(active.workingMessages.length, 2, "Normal later turns do not retain orientation UI overrides");
   assert.deepEqual(active.messages[0], {
     message: { customType: "goal-orientation-startup", content: goalStartupPrompt(cwd, name), display: false,
       details: { mode: "goal", directory: cwd, identity: name } },
@@ -89,7 +110,14 @@ test("Pi --goal starts one extension-authored turn; ordinary startup and reload 
     await noninteractive.start("startup");
     assert.deepEqual(noninteractive.messages, []);
     assert.match(noninteractive.warnings[0], /requires interactive Pi/);
+    assert.deepEqual(noninteractive.workingMessages, []);
+    assert.deepEqual(noninteractive.workingVisibility, []);
   }
+  const interrupted = await load(true);
+  await interrupted.start("startup");
+  await interrupted.invoke("session_shutdown");
+  assert.deepEqual(interrupted.workingMessages, ["Orienting…", undefined]);
+  assert.deepEqual(interrupted.workingVisibility, [true, false, true]);
   for (const invalid of ["not JSON", "{}", '{"created_by":[]}', '{"created_by":[{"name":""}]}',
     '{"created_by":[{"name":"one"},{"name":"two"}]}']) {
     await writeFile(join(cwd, ".scryer"), invalid);
