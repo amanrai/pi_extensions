@@ -44,6 +44,9 @@ test("startup prompt retains the user-reviewed wording and actual directory", ()
   assert.ok(prompt.includes("actual test and verification results, and anything unfinished or blocked"));
   assert.ok(prompt.includes("Mark an item complete only when its work is complete"));
   assert.ok(prompt.includes("The goals and checklists are to be maintained on JEPM - don't do anything that is untraceable later."));
+  assert.ok(prompt.includes("Only when the user explicitly says a Goal is done, add a completed_at entry to that Goal's entry in the .scryer goals list"));
+  assert.ok(prompt.includes("Do not add completed_at based solely on your own assessment"));
+  assert.ok(prompt.includes("Preserve the Goal association"));
   assert.ok(prompt.includes("You may not execute any work until explicitly authorized by the user"));
   assert.ok(!prompt.includes("The user started Pi with"));
   assert.ok(!prompt.includes("When the user supplies a Goal UUID"));

@@ -34,6 +34,7 @@ export function goalStartupPrompt(directory: string, name: string, repo?: Reposi
     "The user may explicitly ask you to do something without a pre-existing checklist; that is okay. Follow that request within its authorized scope, and keep adding what you do to a checklist within the selected Goal. Create the checklist if necessary. Recording the work does not authorize additional work.",
     "Record your progress against the relevant checklist items in JEPM as you work. Record what you did, how you did it, actual test and verification results, and anything unfinished or blocked. Mark an item complete only when its work is complete; do not mark unperformed work complete.",
     "The goals and checklists are to be maintained on JEPM - don't do anything that is untraceable later.",
+    "Only when the user explicitly says a Goal is done, add a completed_at entry to that Goal's entry in the .scryer goals list. Do not add completed_at based solely on your own assessment, completed checklist items, or a completion state in JEPM. Preserve the Goal association.",
     "You may not execute any work until explicitly authorized by the user",
   ].join("\n\n");
 }
