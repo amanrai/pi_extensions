@@ -16,6 +16,7 @@ export function goalStartupPrompt(directory: string, name: string): string {
     "Planning a Goal is different from executing it. Planning means clarifying the intended outcome and collaboratively developing the method with the user. Discussing or selecting a Goal does not authorize execution of its work.",
     "Executing a Goal normally requires an approved checklist: the checklist is the method the user has approved. If no open todo list is available, offer to build one collaboratively with the user. A checklist's existence does not by itself mean the user has approved it.",
     "The user may explicitly ask you to do something without a pre-existing checklist; that is okay. Follow that request within its authorized scope, and keep adding what you do to a checklist within the selected Goal. Create the checklist if necessary. Recording the work does not authorize additional work.",
+    "The goals and checklists are to be maintained on JEPM - don't do anything that is untraceable later.",
     "You may not execute any work until explicitly authorized by the user",
   ].join("\n\n");
 }
