@@ -180,8 +180,8 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
     assert.equal(result.details.changed, true);
     assert.equal(posts.length, before + 1);
     const event = posts.at(-1);
-    assert.equal(event.title, "");
-    assert.equal(event.body, "");
+    assert.equal(event.title, "update_event");
+    assert.equal(event.body, "update_event");
     assert.equal(event.metadata.v2meta[operation], goalId);
     assert.equal(event.metadata.v2meta.identity, name);
     assert.deepEqual(event.metadata.v2meta.goals, operation === "goal_start" ? [{ id: goalId, title: "Filter updates" }] : []);

@@ -633,7 +633,7 @@ async function createSessionUpdate(update: Omit<SessionUpdate, "id" | "from" | "
     body: formatUpdateBody(update.body, options.coding, options.fullBody ? Infinity : undefined),
     level: update.level,
   };
-  if ((!normalized.title || !normalized.body) && !options.transition) throw new Error("update title and body required");
+  if (!normalized.title || !normalized.body) throw new Error("update title and body required");
   const hash = updateHash(normalized);
   const important = update.kind === "blocked" || update.kind === "error" || update.kind === "done" || update.kind === "waiting";
   if (!options.force && hash === lastUpdateHash) return undefined;
@@ -731,10 +731,10 @@ async function runIdleRecap(ctx: ExtensionContext) {
 
 async function recentUpdates(limit = 5) {
   if (!producerFrom) return [] as SessionUpdate[];
-  // Metadata-only events must not displace the observer's previous reports.
+  // Mechanical transition events must not displace the observer's previous reports.
   for (let size = limit; ; size = Math.min(500, size * 2)) {
     const data = await api<{ updates: SessionUpdate[] }>(`/api/updates?from=${encodeURIComponent(producerFrom)}&limit=${size}`);
-    const reports = data.updates.filter(update => !(update.title === "" && update.body === "" &&
+    const reports = data.updates.filter(update => !(update.title === "update_event" && update.body === "update_event" &&
       Object.keys(goalOperations).some(field => Boolean((update.metadata?.v2meta as Record<string, unknown>)?.[field]))));
     if (reports.length >= limit || data.updates.length < size || size === 500) return reports.slice(-limit);
   }
@@ -969,12 +969,12 @@ export default function (pi: ExtensionAPI) {
   for (const operation of Object.keys(goalOperations) as (keyof typeof goalOperations)[]) {
     pi.registerTool({
       name: operation, label: operation,
-      description: `Move a Goal exclusively to the session file's ${goalOperations[operation]} list. Mechanical local tracking only; does not update PM records. Emits a content-free comms event only on membership change.`,
+      description: `Move a Goal exclusively to the session file's ${goalOperations[operation]} list. Mechanical local tracking only; does not update PM records. Emits a mechanical comms event (title/body: update_event) only on membership change.`,
       parameters: Type.Object({ id: Type.String({ description: "Goal UUID" }), title: Type.Optional(Type.String({ description: "Goal title if known; retained on later moves. UUID is used when unknown; no PM lookup." })) }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const path = sessionGoalPath(ctx);
         const result = await withFileMutationQueue(path, () => transitionGoal(path, operation, params.id, params.title, async (field, id) => {
-          await createSessionUpdate({ kind: "progress", title: "", body: "", metadata: { v2meta: { [field]: id } } }, { force: true, ctx, transition: true });
+          await createSessionUpdate({ kind: "progress", title: "update_event", body: "update_event", metadata: { v2meta: { [field]: id } } }, { force: true, ctx, transition: true });
         }));
         if (result.eventError) warnGoals(ctx, `Goal moved locally, but transition event delivery failed: ${result.eventError}. Repeating the same operation is a no-op and will not resend.`);
         return { content: [{ type: "text", text: `${result.changed ? "Moved" : "Already in"} ${params.id}: ${goalOperations[operation]} (${path})${result.eventError ? `; event delivery failed: ${result.eventError}` : ""}` }], details: { path, ...result } };
