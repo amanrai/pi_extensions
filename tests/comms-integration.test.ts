@@ -173,7 +173,7 @@ test("Pi tool events become per-update folder metadata, without replay", { skip:
 
   // Exercise real registered tools and the shared publisher, not just helpers.
   const goalId = "80fcdba1-fefa-4126-82b6-851be04177cf";
-  for (const operation of ["goal_start", "goal_finish", "goal_complete", "goal_abandon"]) {
+  for (const operation of ["goal_start", "goal_finish", "goal_complete", "goal_abandon", "goal_ready_for_review"]) {
     const tool = extension.tools.get(operation).definition;
     const before = posts.length;
     const result = await tool.execute("goal", { id: goalId, title: "Filter updates" }, undefined, undefined, ctx);

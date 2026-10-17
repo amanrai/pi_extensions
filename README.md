@@ -16,20 +16,21 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 
 ## Session Goal tracking
 
-The comms extension creates `.scryer-<main-Pi-session-id>` in the session header's startup directory, with empty `current`, `finish`, `complete`, and `abandon` arrays. Resume/reload preserves existing data; other sessions' files (including checked-in ones) are ignored. A context message supplies the exact path. Files may be committed. This state is session-wide, not rolled back on `/tree`.
+The comms extension creates `.scryer-<main-Pi-session-id>` in the session header's startup directory, with empty `current`, `finish`, `complete`, `abandon`, and `ready_for_review` arrays. Legacy files without `ready_for_review` treat it as empty and gain it on the next actual transition; malformed lists are not silently repaired. Resume/reload preserves existing data; other sessions' files (including checked-in ones) are ignored. A context message supplies the exact path. Files may be committed. This state is session-wide, not rolled back on `/tree`.
 
 Tools accept `{ "id": "GOAL_UUID", "title": "optional known title" }`:
 
 - `goal_start` → `current`.
 - `goal_finish` → `finish` (no longer working on it).
-- `goal_complete` → `complete` (Goal accomplished).
+- `goal_complete` → `complete` (when the user says the Goal is accomplished).
 - `goal_abandon` → `abandon`.
+- `goal_ready_for_review` → `ready_for_review` (agent believes its work is done and ready for user review).
 
 A transition removes that UUID from every list and puts it only in the destination. No-op calls emit nothing. Writes are serialized and atomically published. Tools do not decide intent or update PM records. Titles are retained on moves; an unknown title uses the UUID, without a PM lookup. Missing/invalid files are not silently repaired by tools.
 
 Every update includes `metadata.v2meta.goals`, copied from `current` at publication time, not inferred from narrative. Missing/invalid/unreadable files warn visibly (stderr outside UI mode) and send `goals: []` without blocking delivery/session. Recap retries retain each part's first-attempt snapshot so stable-ID readback still works. Identity and other metadata are preserved. Observer prompts, schedule and independent reporting remain unchanged.
 
-Actual transitions additionally publish mechanical `progress` events with both title and body set to exactly `update_event`, and one of `metadata.v2meta.goal_start`, `goal_finish`, `goal_complete`, or `goal_abandon` set to the UUID. Only these four transition events use this marker; ordinary observer updates are unchanged. They bypass observer inference, semantic-update throttling and PM session-note mirroring, and are excluded from the observer's previous-report context. They use the existing interactions-service content requirements; no service change is needed. If delivery fails, the local move remains committed and a warning/tool result reports the failure. No durable event outbox or exactly-once guarantee is provided; retrying the unchanged move does not resend.
+Actual transitions additionally publish mechanical `progress` events with both title and body set to exactly `update_event`, and one of `metadata.v2meta.goal_start`, `goal_finish`, `goal_complete`, `goal_abandon`, or `goal_ready_for_review` set to the UUID. Only these five transition events use this marker; ordinary observer updates are unchanged. They bypass observer inference, semantic-update throttling and PM session-note mirroring, and are excluded from the observer's previous-report context. They use the existing interactions-service content requirements; no service change is needed. If delivery fails, the local move remains committed and a warning/tool result reports the failure. No durable event outbox or exactly-once guarantee is provided; retrying the unchanged move does not resend.
 
 ## Goal-oriented startup
 

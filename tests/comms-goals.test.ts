@@ -32,7 +32,7 @@ test("initialization is exclusive, preserves resumed state, isolates sessions", 
   assert.equal(await readFile(path, "utf8"), "invalid");
 });
 
-test("four transitions are exclusive and idempotent; only changes emit events", async t => {
+test("five transitions are exclusive and idempotent; only changes emit events", async t => {
   const path = await fixture(t);
   await initializeGoalFile(path);
   const events: any[] = [];
@@ -44,7 +44,7 @@ test("four transitions are exclusive and idempotent; only changes emit events", 
     for (const [key, entries] of Object.entries(data)) assert.equal((entries as any[]).length, key === target ? 1 : 0);
     assert.equal(data[target][0].title, "Filter updates");
   }
-  assert.equal(events.length, 4);
+  assert.equal(events.length, 5);
   assert.deepEqual(events[0], { goal_start: id });
 });
 
@@ -83,6 +83,45 @@ test("publication reads fresh current only and preserves other metadata", async 
   // Reading a directory is an OS read error even when tests run as root.
   assert.deepEqual((await goalMetadata(join(path, ".."), meta, warn) as any).v2meta.goals, []);
   assert.equal(warnings.length, 6);
+});
+
+test("legacy four-list files support review without destructive startup migration", async t => {
+  const path = await fixture(t);
+  const legacy = JSON.stringify({ current: [{ id, title: "Filter updates" }], finish: [], complete: [], abandon: [] });
+  await writeFile(path, legacy);
+  await initializeGoalFile(path);
+  assert.equal(await readFile(path, "utf8"), legacy);
+  const events: any[] = [];
+  const publish = async (operation: string, uuid: string) => { events.push({ [operation]: uuid }); };
+  await transitionGoal(path, "goal_ready_for_review", id, undefined, publish);
+  let data = JSON.parse(await readFile(path, "utf8"));
+  assert.deepEqual(data.current, []);
+  assert.deepEqual(data.ready_for_review, [{ id, title: "Filter updates" }]);
+  assert.deepEqual(events, [{ goal_ready_for_review: id }]);
+  const metadata: any = await goalMetadata(path, {}, assert.fail);
+  assert.deepEqual(metadata.v2meta.goals, []);
+  await transitionGoal(path, "goal_ready_for_review", id, undefined, publish);
+  assert.equal(events.length, 1);
+  await transitionGoal(path, "goal_start", id);
+  data = JSON.parse(await readFile(path, "utf8"));
+  assert.deepEqual(data.ready_for_review, []);
+  assert.equal(data.current[0].id, id);
+  await transitionGoal(path, "goal_ready_for_review", id);
+  await transitionGoal(path, "goal_complete", id);
+  data = JSON.parse(await readFile(path, "utf8"));
+  assert.deepEqual(data.ready_for_review, []);
+  assert.equal(data.complete[0].id, id);
+});
+
+test("new files include review list; malformed review state is not repaired", async t => {
+  const path = await fixture(t);
+  await initializeGoalFile(path);
+  const data = JSON.parse(await readFile(path, "utf8"));
+  assert.deepEqual(data.ready_for_review, []);
+  data.ready_for_review = null;
+  await writeFile(path, JSON.stringify(data));
+  await assert.rejects(initializeGoalFile(path), /Invalid ready_for_review/);
+  await assert.rejects(transitionGoal(path, "goal_start", id), /Invalid ready_for_review/);
 });
 
 test("failed writes emit no event; delivery failure leaves local state and reports failure", async t => {

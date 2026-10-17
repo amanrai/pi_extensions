@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 
 export type Goal = { id: string; title: string };
-export const goalLists = ["current", "finish", "complete", "abandon"] as const;
+export const goalLists = ["current", "finish", "complete", "abandon", "ready_for_review"] as const;
 export type GoalList = typeof goalLists[number];
-export const goalOperations = { goal_start: "current", goal_finish: "finish", goal_complete: "complete", goal_abandon: "abandon" } as const;
+export const goalOperations = { goal_start: "current", goal_finish: "finish", goal_complete: "complete", goal_abandon: "abandon", goal_ready_for_review: "ready_for_review" } as const;
 export type GoalOperation = keyof typeof goalOperations;
 export type GoalFile = Record<string, Goal[]> & Record<GoalList, Goal[]>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -34,6 +34,9 @@ export async function readCurrentGoals(path: string): Promise<Goal[]> {
 async function readGoalFile(path: string): Promise<GoalFile> {
   const data = JSON.parse(await readFile(path, "utf8"));
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Expected a Goal-list object");
+  // Older files have four lists. Treat the new list as empty until the next
+  // actual transition writes it, without rewriting files just on resume.
+  if (!("ready_for_review" in data)) data.ready_for_review = [];
   for (const name of goalLists) if (!(name in data)) throw new Error(`Missing ${name} list`);
   for (const [name, value] of Object.entries(data)) entries(value, name);
   return data;
@@ -42,7 +45,7 @@ async function readGoalFile(path: string): Promise<GoalFile> {
 // Publish complete bytes without overwriting an existing (even invalid) file.
 export async function initializeGoalFile(path: string): Promise<void> {
   const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, JSON.stringify({ current: [], finish: [], complete: [], abandon: [] }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
+  await writeFile(temporary, JSON.stringify({ current: [], finish: [], complete: [], abandon: [], ready_for_review: [] }, null, 2) + "\n", { flag: "wx", mode: 0o600 });
   try {
     try { await link(temporary, path); }
     catch (error: any) { if (error.code !== "EEXIST") throw error; }
@@ -50,7 +53,7 @@ export async function initializeGoalFile(path: string): Promise<void> {
   await readGoalFile(path);
 }
 
-// Serialize transitions (including their event publication) across all four tools.
+// Serialize transitions (including their event publication) across all Goal tools.
 // Atomic rename also ensures readers never see partial JSON. Separate session IDs
 // use separate files; this is not a cross-process locking service.
 const queues = new Map<string, Promise<unknown>>();

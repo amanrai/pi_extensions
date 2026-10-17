@@ -432,7 +432,7 @@ async function startComms(pi: ExtensionAPI, ctx: ExtensionContext) {
   try {
     const path = sessionGoalPath(ctx);
     await initializeGoalFile(path);
-    pi.sendMessage({ customType: "scryer-session-goals", content: `Session Goal file: ${path}. Use goal_start, goal_finish, goal_complete and goal_abandon to manage mutually exclusive current, finish, complete and abandon lists. These tools do not update the PM system.`, display: false });
+    pi.sendMessage({ customType: "scryer-session-goals", content: `Session Goal file: ${path}. Use goal_start, goal_finish, goal_complete, goal_abandon and goal_ready_for_review to manage mutually exclusive current, finish, complete, abandon and ready_for_review lists. These tools do not update the PM system.`, display: false });
   } catch (error: any) { warnGoals(ctx, `Session Goal initialization failed: ${error?.message ?? String(error)}`); }
   activity = windowActivity(ctx.sessionManager);
   recapRepo = await localRepoRoot(ctx.cwd);
@@ -969,7 +969,7 @@ export default function (pi: ExtensionAPI) {
   for (const operation of Object.keys(goalOperations) as (keyof typeof goalOperations)[]) {
     pi.registerTool({
       name: operation, label: operation,
-      description: `Move a Goal exclusively to the session file's ${goalOperations[operation]} list. Mechanical local tracking only; does not update PM records. Emits a mechanical comms event (title/body: update_event) only on membership change.`,
+      description: `Move a Goal exclusively to the session file's ${goalOperations[operation]} list. Mechanical local tracking only; does not update PM records. Emits a mechanical comms event (title/body: update_event) only on membership change.${operation === "goal_ready_for_review" ? " Call when you believe your work is done and ready for user review." : operation === "goal_complete" ? " Call when the user says the Goal has been accomplished." : ""}`,
       parameters: Type.Object({ id: Type.String({ description: "Goal UUID" }), title: Type.Optional(Type.String({ description: "Goal title if known; retained on later moves. UUID is used when unknown; no PM lookup." })) }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const path = sessionGoalPath(ctx);
