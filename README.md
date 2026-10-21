@@ -63,6 +63,35 @@ Tests: `PI_TEST_AGENT_ROOT=/path/to/@earendil-works/pi-coding-agent node --exper
 
 The workload test executes both a one-shot authored HTTP script and the tool core against identical fixtures. For `ABCD → move C before A → CABD`, both use **one model-facing invocation and five HTTP requests**. Initial measurement: script arguments **1,662 UTF-8 bytes**, tool arguments **188 bytes** (88.7% less per-call authored input). This is not a tokenizer, LLM latency, total-context, or human-attention measurement; it excludes the fixed tool declaration, result text and UUID discovery. The extra serialized tool registration (`name`, `description`, `parameters`) is **1,630 bytes**: counted once alongside this invocation, definition + arguments is **1,818 bytes**, versus the script's 1,662 bytes. Thus this does **not** establish a first-call total-context saving, and repeated provider serialization/caching was not measured. No claim of fewer HTTP requests or model turns. The demonstrated workload reduction is no per-operation integration code authoring; the reusable tool additionally implements tested failure handling absent from the success-only baseline script.
 
+## Explicit comms updates
+
+`comms/` registers **`send_comms_update`** for one caller-authored interaction-service update. **Everything below is required explicitly at Aman's request**, not because automatic attribution was overlooked. He requested explicitness while the implementation state was unclear, and explicitly required the ability to use a different Goal set even if that option is never used.
+
+```json
+{
+  "id": "UPDATE_UUID",
+  "from": "CURRENT_PRODUCER_UUID",
+  "kind": "decision",
+  "title": "Update title",
+  "body": "Complete exact update body",
+  "metadata": {
+    "v2meta": {
+      "identity": "FULL_STARTUP_IDENTITY",
+      "foldersTouched": [],
+      "goals": []
+    }
+  }
+}
+```
+
+Use actual UUIDs and full startup identity (including any suffix). `from` and identity are validated against this session, never silently supplied or replaced. Supply `foldersTouched` as machine-qualified absolute paths, or explicit `[]`. Supply Goals as `[{"id":"GOAL_UUID","title":"Goal title"}]` or explicit `[]`. **They need not match current session Goals** and are transmitted unchanged; the session Goal file is neither read nor changed. Metadata may contain additional caller-supplied fields outside `v2meta`, but not full `.scryer` identity records/lists. Goal existence is not looked up. This is record communication, not Goal orientation or execution authority.
+
+No generated update ID, inferred folders/Goals, metadata merging, whitespace trimming, title/body truncation, automatic coding tags or model inference. Use `<coding>...</coding>` only for actual code changes. The tool accepts the script's six top-level fields, not `level`/`createdAt`; the service supplies its ordinary timestamps as before. Service URL is `SCRYER_INTERACTIONS_URL` or the existing comms default. The initialized session producer marker supplies the values the caller must explicitly pass.
+
+One POST and one GET verify the exact stored id/from/kind/title/body/metadata. A 409 with identical stored content returns `already_stored`; a conflicting ID fails without overwriting. Lost acknowledgments or failed/mismatched read-back report unverified delivery, not proof of absence; inspect the explicit ID before another send. There is no automatic repost/retry or rollback. Read-back searches the latest 500 updates for this producer, so unusually heavy concurrent traffic can make delivery unverified even if committed. This tool does not alter observer throttling, mirror directly to PM session notes, or reset recap checkpoints. Use **`send_recap`** for requested recaps; automatic updates and recap behavior are unchanged.
+
+Tests: `PI_TEST_AGENT_ROOT=/path/to/@earendil-works/pi-coding-agent node --experimental-strip-types --test tests/comms-explicit*.test.ts`. Covers exact full-body/metadata preservation, alternate/empty Goals, no session-file changes or PM mirror, required-field/attribution failures, duplicate/conflicting IDs, lost responses, read-back errors, cancellation, and real Pi registration/lifecycle with mocked service calls.
+
 ## Session Goal tracking
 
 The comms extension creates `.scryer-<main-Pi-session-id>` in the session header's startup directory, with empty `current`, `finish`, `complete`, `abandon`, and `ready_for_review` arrays. Legacy files without `ready_for_review` treat it as empty and gain it on the next actual transition; malformed lists are not silently repaired. Resume/reload preserves existing data; other sessions' files (including checked-in ones) are ignored. A context message supplies the exact path. Files may be committed. This state is session-wide, not rolled back on `/tree`.

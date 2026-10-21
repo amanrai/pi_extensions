@@ -17,6 +17,7 @@ import { detectRuntimeMachineName, initializeStartupIdentity, recordFolderAction
 import { startIdentityRegistration } from "./registration.ts";
 import { formatUpdateBody, extractJson } from "./updates.ts";
 import { FOLDER_TOUCH, FOLDER_TOUCHES_SENT, observeFolderTouch, pendingFolderTouches, selectUpdateFolders, type FolderTouch } from "./folders.ts";
+import { sendExplicitUpdate } from "./explicit-updates.ts";
 
 type InteractionChoice = { id: string; label: string; send?: string; custom?: boolean };
 type InteractionRequest = {
@@ -981,6 +982,30 @@ export default function (pi: ExtensionAPI) {
       },
     });
   }
+  pi.registerTool({
+    name: "send_comms_update",
+    label: "Send explicit comms update",
+    description: "Send ONE exact interaction-service update. EVERY payload field is explicit and required at the user's request: id (caller-supplied UUID), from (current producer UUID), kind, title, body, metadata:{v2meta:{identity:full startup name,foldersTouched:[machine:absolute_path,...],goals:[{id:UUID,title},...]}}. Explicit [] is valid for folders/Goals. A DIFFERENT Goal set from current session associations is allowed and passed unchanged; no session Goal changes or Goal-existence lookup. from/identity must match the startup producer/name; validation never substitutes missing values. No ID generation, inferred fields, title/body trimming/truncation, coding tags or metadata merging. Posts once and verifies exact stored fields through read-back; an identical existing id returns already_stored, a conflicting id fails. Failures can be unverified delivery: inspect id, never blindly retry. No PM mirror, observer-throttle change or recap checkpoint reset. Use send_recap for requested recaps. Server assigns its ordinary timestamps; this tool accepts only the explicit script fields above plus caller-supplied extra metadata.",
+    parameters: Type.Object({
+      id: Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }),
+      from: Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }),
+      kind: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }), body: Type.String({ minLength: 1 }),
+      metadata: Type.Object({ v2meta: Type.Object({
+        identity: Type.String({ minLength: 1 }),
+        foldersTouched: Type.Array(Type.String()),
+        goals: Type.Array(Type.Object({ id: Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }), title: Type.String({ minLength: 1 }) }, { additionalProperties: false })),
+      }, { additionalProperties: false }) }, { additionalProperties: true }),
+    }, { additionalProperties: false }),
+    outputSchema: Type.Object({
+      status: Type.Union([Type.Literal("sent"), Type.Literal("already_stored"), Type.Literal("failed")]),
+      id: Type.String(), from: Type.String(), verified: Type.Boolean(), http_requests: Type.Integer(), error: Type.Optional(Type.String()),
+    }, { additionalProperties: false }),
+    async execute(_id, params, signal) {
+      if (!producerFrom || !startupIdentity) throw new Error("comms not initialized; explicit producer/identity cannot be validated");
+      const result = await sendExplicitUpdate(params, { baseUrl: SERVICE_URL, sender: { from: producerFrom, identity: startupIdentity.name }, signal: AbortSignal.any([lifetime.signal, ...(signal ? [signal] : [])]) });
+      return { content: [{ type: "text", text: JSON.stringify(result) }], details: result, structuredContent: result, ...(result.status === "failed" ? { isError: true } : {}) };
+    },
+  });
   pi.registerTool({
     name: "send_recap",
     label: "Send Recap",
