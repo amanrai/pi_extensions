@@ -16,14 +16,27 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 
 ## Scryer read tools and checklist ordering
 
-`scryer-checklist/` exposes four non-overlapping operations:
+`scryer-checklist/` exposes five non-overlapping operations:
 
+- **`create_subgoals_for_goal({goal_id, subgoals})`**: creates and links new sub-Goals beneath any existing undeleted Goal, including one that itself has parents. Each sub-Goal requires only `title`; optional `description_md` and `checklist_items: [{title, description_md?}]` are preserved. Checklist array order becomes internal display positions. Validates the whole batch before network work. Success returns newly created-and-linked UUIDs in input order. Uses one parent GET plus two POSTs per child (Goal creation with initial checklist, then child `supports` parent). Not atomic: errors return created/linked UUIDs, failed title and any uncertain create/link; no retry, deletion or rollback. Duplicate titles create distinct records, not inferred updates. Full startup identity supplies attribution; no orientation, assignment, completion or execution authorization. Tests use synthetic HTTP fixtures, not unrequested live test Goals.
 - **`get_top_level_goals({})`**: undeleted Goals with **no recorded parent**, including completed roots. Uses the Goal list (explicitly including completed Goals) and active relationships; any active `supports` edge makes its source a child, even if the target parent is completed or absent from the returned Goal set. Other relationship types and deleted edges do not establish parenthood. Preserves every list-API field and API order; does not expand checklists or descendants. Two GETs, no cross-request snapshot guarantee, no writes or persistent cache; errors never become false roots or empty success.
 - **`get_checklist_for_goal({goal_id})`**: one GET returning the full active checklist array in current API order, preserving all API-provided fields. Empty is `[]`; missing Goals, malformed responses and network failures are errors. Separate comment histories and deleted items are not included.
 - **`get_subgoals_for_goal({goal_id})`**: all nested sub-Goals as `[{goal: <full API record>, subgoals: [...]}]`, excluding the requested root. Follows active `supports` edges (source child, target parent), retaining completed Goals and recorded relationship order. Duplicate edges are deduplicated; shared descendants appear under each parent but each record/relationship list is fetched once per invocation. Cycles or failed descendant reads fail the operation instead of claiming a complete tree. No persistent cache or automatic retries. Uses two GETs per unique visited Goal (including root). These tools are read-only, require no startup identity, and do not change orientation or execution authorization. Structured results are also available to programmatic callers.
 - **`scryer_reorder_checklist`**: only changes checklist positions, as described below.
 
-All read tools use the same API URL precedence as ordering. Their ordinary use is self-contained in the tool definitions. Read tests: `node --experimental-strip-types --test tests/scryer-read.test.ts` (set `PI_TEST_AGENT_ROOT` to include real Pi-loader integration tests).
+All tools use the same API URL precedence as ordering. Their ordinary use is self-contained in the tool definitions. Read tests: `node --experimental-strip-types --test tests/scryer-read.test.ts`; creation tests: `node --experimental-strip-types --test tests/scryer-create.test.ts` (set `PI_TEST_AGENT_ROOT` to include real Pi-loader integration tests).
+
+Creation JSON example (replace the parent placeholder with its UUID):
+
+```json
+{
+  "goal_id": "PARENT_UUID",
+  "subgoals": [
+    { "title": "Title alone is enough" },
+    { "title": "With context", "description_md": "Why this matters", "checklist_items": [{ "title": "First step", "description_md": "Discuss the method" }] }
+  ]
+}
+```
 
 `scryer-checklist/` registers **`scryer_reorder_checklist`**. Its model-facing definition is sufficient for ordinary use; no PM skill, endpoint discovery or authored script is needed once UUIDs are known.
 

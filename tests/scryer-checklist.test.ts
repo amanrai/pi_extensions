@@ -174,7 +174,7 @@ test("installed Pi loads distinct read/reorder tools; registered execute uses st
   const loaded = await loadExtensions([resolve("extensions/scryer-checklist/index.ts")], directory);
   assert.deepEqual(loaded.errors, []);
   const tools = loaded.extensions[0].tools;
-  assert.deepEqual([...tools.keys()], ["get_top_level_goals", "get_checklist_for_goal", "get_subgoals_for_goal", "scryer_reorder_checklist"]);
+  assert.deepEqual([...tools.keys()], ["create_subgoals_for_goal", "get_top_level_goals", "get_checklist_for_goal", "get_subgoals_for_goal", "scryer_reorder_checklist"]);
   const readTool = tools.get("get_checklist_for_goal").definition;
   const readResult = await readTool.execute("read", { goal_id: goal }, undefined, undefined, {});
   assert.deepEqual(readResult.details, f.rows);

@@ -1,12 +1,50 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { reorderChecklist } from "./order.ts";
 import { getChecklistForGoal, getSubgoalsForGoal, getTopLevelGoals } from "./read.ts";
+import { createSubgoals } from "./create.ts";
 
 const uuid = () => Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" });
+async function startupActor(ctx: ExtensionContext) {
+  const cwd = ctx.sessionManager.getHeader()?.cwd ?? ctx.cwd;
+  const record = JSON.parse(await readFile(join(cwd, ".scryer"), "utf8"));
+  if (!Array.isArray(record.created_by) || record.created_by.length !== 1 || typeof record.created_by[0]?.name !== "string" || !record.created_by[0].name.trim()) {
+    throw new Error("Startup .scryer must have one named created_by identity; no guessed actor or remote writes.");
+  }
+  return { actor_role: "pi-agent", actor_instance_key: record.created_by[0].name };
+}
 export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "create_subgoals_for_goal",
+    label: "Create sub-Goals",
+    description: "Create and link new sub-Goals beneath an existing Goal. JSON: {goal_id: parent UUID, subgoals:[{title,description_md?,checklist_items?:[{title,description_md?}]}]}. Only title is required within each new Goal/checklist item; descriptions and checklists may be omitted. Preserves supplied Goal/checklist order. Parent may itself have parents. Success returns a JSON array of newly created-and-linked UUIDs in input order. Each child supports the supplied parent. Validates the complete batch before writes. No completion, orientation, assignment or execution authorization. NOT atomic: on failure, error result reports created_goal_ids, linked_goal_ids and any uncertain operation; stop and inspect rather than blindly retry. No automatic retry/rollback/deletion. Writes attributed to full startup .scryer creator identity. Requires user-authorized record creation, not authorization to execute the recorded work.",
+    parameters: Type.Object({
+      goal_id: uuid(),
+      subgoals: Type.Array(Type.Object({
+        title: Type.String({ minLength: 1 }),
+        description_md: Type.Optional(Type.String()),
+        checklist_items: Type.Optional(Type.Array(Type.Object({
+          title: Type.String({ minLength: 1 }), description_md: Type.Optional(Type.String()),
+        }, { additionalProperties: false }))),
+      }, { additionalProperties: false }), { minItems: 1 }),
+    }, { additionalProperties: false }),
+    outputSchema: Type.Union([Type.Array(uuid()), Type.Object({
+      status: Type.Literal("failed"), created_goal_ids: Type.Array(uuid()), linked_goal_ids: Type.Array(uuid()),
+      http_requests: Type.Integer(), error: Type.String(), failed_subgoal_title: Type.Optional(Type.String()),
+      uncertain_stage: Type.Optional(Type.Union([Type.Literal("create_goal"), Type.Literal("link_goal")])),
+      uncertain_goal_id: Type.Optional(uuid()),
+    }, { additionalProperties: false })]),
+    async execute(_id, params, signal, _update, ctx) {
+      const result = await createSubgoals(params, {
+        baseUrl: process.env.SCRYER_API_BASE_URL || process.env.PI_PM_API_BASE_URL || "http://smux-linode:43210",
+        actor: await startupActor(ctx), signal,
+      });
+      const output = result.status === "created" ? result.linked_goal_ids : result;
+      return { content: [{ type: "text", text: JSON.stringify(output) }], details: result, structuredContent: output, ...(result.status === "failed" ? { isError: true } : {}) };
+    },
+  });
   pi.registerTool({
     name: "get_top_level_goals",
     label: "Get top-level Goals",
@@ -62,15 +100,9 @@ export default function (pi: ExtensionAPI) {
       }, { additionalProperties: false }), { minItems: 1, maxItems: 100 }),
     }, { additionalProperties: false }),
     async execute(_id, params, signal, _update, ctx) {
-      // Session-header cwd is the startup folder, not whichever repo we later inspect.
-      const cwd = ctx.sessionManager.getHeader()?.cwd ?? ctx.cwd;
-      const record = JSON.parse(await readFile(join(cwd, ".scryer"), "utf8"));
-      if (!Array.isArray(record.created_by) || record.created_by.length !== 1 || typeof record.created_by[0]?.name !== "string" || !record.created_by[0].name.trim()) {
-        throw new Error("Startup .scryer must have one named created_by identity; no guessed actor or remote writes.");
-      }
       const result = await reorderChecklist(params, {
         baseUrl: process.env.SCRYER_API_BASE_URL || process.env.PI_PM_API_BASE_URL || "http://smux-linode:43210",
-        actor: { actor_role: "pi-agent", actor_instance_key: record.created_by[0].name },
+        actor: await startupActor(ctx),
         signal,
       });
       return { content: [{ type: "text", text: JSON.stringify(result) }], details: result, ...(result.status === "failed" ? { isError: true } : {}) };
