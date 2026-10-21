@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { reorderChecklist } from "./order.ts";
 import { getChecklistForGoal, getSubgoalsForGoal, getTopLevelGoals } from "./read.ts";
 import { createSubgoals } from "./create.ts";
+import { setParents, moveSubgoals, updateChecklistItems, type BatchResult } from "./mutations.ts";
 
 const uuid = () => Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" });
 async function startupActor(ctx: ExtensionContext) {
@@ -15,7 +16,48 @@ async function startupActor(ctx: ExtensionContext) {
   }
   return { actor_role: "pi-agent", actor_instance_key: record.created_by[0].name };
 }
+const batchOutput = Type.Object({
+  status: Type.Union([Type.Literal("updated"), Type.Literal("unchanged"), Type.Literal("failed")]),
+  confirmed: Type.Array(Type.Record(Type.String(), Type.String())), http_requests: Type.Integer(),
+  uncertain: Type.Optional(Type.Record(Type.String(), Type.String())), error: Type.Optional(Type.String()),
+  items: Type.Optional(Type.Array(Type.Unknown())),
+});
+function batchResult(result: BatchResult) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(result) }], details: result, structuredContent: result, ...(result.status === "failed" ? { isError: true } : {}) };
+}
 export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "set_parent_for_goal", label: "Add Goal parents",
+    description: "ADD parents without replacing any existing parents. JSON {goals:[{goal_id: child UUID,parent_ids:[parent UUID,...]},...]}; supports multiple children/parents in one call. Creates only missing active supports links (source child, target parent), skipping duplicate/existing links. Any existing undeleted Goal may be a parent, including one with parents. Validates all references and checks requested graph cycles before writes; read-back verifies requested additions. No Goal content/completion/orientation/authorization changes. Not atomic or cross-instance locked; partial/unknown failures report confirmed and uncertain operations. No automatic retry/rollback. For exclusive replacement use move_subgoal_to_goal instead. Requires explicit user-authorized parent additions.",
+    parameters: Type.Object({ goals: Type.Array(Type.Object({ goal_id: uuid(), parent_ids: Type.Array(uuid(), { minItems: 1 }) }, { additionalProperties: false }), { minItems: 1 }) }, { additionalProperties: false }),
+    outputSchema: batchOutput,
+    async execute(_id, params, signal, _update, ctx) {
+      return batchResult(await setParents(params, { baseUrl: process.env.SCRYER_API_BASE_URL || process.env.PI_PM_API_BASE_URL || "http://smux-linode:43210", actor: await startupActor(ctx), signal }));
+    },
+  });
+  pi.registerTool({
+    name: "move_subgoal_to_goal", label: "Move sub-Goals exclusively",
+    description: "EXCLUSIVELY reparent existing sub-Goals: remove ALL their other active parent links and attach to each chosen destination. JSON {moves:[{subgoal_id: UUID,destination_goal_id: UUID},...]}. One destination per sub-Goal; repeated subgoal_id in one batch is rejected. Validates records/cycles in supplied sequential order before writes. Confirms destination link before deleting old parent links; preserves child links, other relationship types and Goal content/status. Final read-back verifies exclusive parent sets. Not atomic: failure/concurrent edits may leave multiple parents; reports confirmed/uncertain operations, no automatic retry/rollback. Never deletes a Goal. Requires explicit user authorization for exclusive moves. For additive parents use set_parent_for_goal instead.",
+    parameters: Type.Object({ moves: Type.Array(Type.Object({ subgoal_id: uuid(), destination_goal_id: uuid() }, { additionalProperties: false }), { minItems: 1 }) }, { additionalProperties: false }),
+    outputSchema: batchOutput,
+    async execute(_id, params, signal, _update, ctx) {
+      return batchResult(await moveSubgoals(params, { baseUrl: process.env.SCRYER_API_BASE_URL || process.env.PI_PM_API_BASE_URL || "http://smux-linode:43210", actor: await startupActor(ctx), signal }));
+    },
+  });
+  pi.registerTool({
+    name: "update_checklist_items", label: "Update checklist items",
+    description: "Update checklist items across ANY Goals. JSON {items:[{item_id: UUID,title?,description_md?:string|null,status?:'complete'|'incomplete',append_comments?:[text,...]},...]}. Omitted fields unchanged; null clears description. Backend supports ONLY complete/incomplete (is_done and server-managed completed_at), not ticket workflow states; reopening clears timestamp. Comments are POSTed in supplied order, NEVER edited/deleted or deduplicated by text. No Goal membership, checklist position, Goal completion, orientation or execution-authorization changes. Entire batch validates and all unique items are read before writes; repeated item updates apply sequentially. Identical fields/empty updates skip PATCH; each supplied comment still appends. Returns confirmed mutations/new comment UUIDs and last-confirmed item records. Non-atomic: stops on partial/unknown failure; inspect before further action, no automatic retry/rollback. Only mark work complete when actually performed.",
+    parameters: Type.Object({ items: Type.Array(Type.Object({
+      item_id: uuid(), title: Type.Optional(Type.String({ minLength: 1 })),
+      description_md: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+      status: Type.Optional(Type.Union([Type.Literal("complete"), Type.Literal("incomplete")])),
+      append_comments: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+    }, { additionalProperties: false }), { minItems: 1 }) }, { additionalProperties: false }),
+    outputSchema: batchOutput,
+    async execute(_id, params, signal, _update, ctx) {
+      return batchResult(await updateChecklistItems(params, { baseUrl: process.env.SCRYER_API_BASE_URL || process.env.PI_PM_API_BASE_URL || "http://smux-linode:43210", actor: await startupActor(ctx), signal }));
+    },
+  });
   pi.registerTool({
     name: "create_subgoals_for_goal",
     label: "Create sub-Goals",
