@@ -14,6 +14,28 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 - `starship-footer.ts` — Starship-powered footer with `agent_name@folder` from the startup `.scryer`, PR link, model, thinking level, tokens, and Codex subscription-aware cost display.
 - `pi-codex-account` — bundled third-party `/codex` account-profile commands for saving, switching, and checking usage of named OpenAI Codex logins.
 
+## Scryer checklist ordering
+
+`scryer-checklist/` registers **`scryer_reorder_checklist`**. Its model-facing definition is sufficient for ordinary use; no PM skill, endpoint discovery or authored script is needed once UUIDs are known.
+
+```json
+{
+  "goal_id": "GOAL_UUID",
+  "moves": [
+    { "item_id": "C_UUID", "operation": "move_before", "anchor_id": "A_UUID" },
+    { "item_id": "D_UUID", "operation": "move_after", "anchor_id": "C_UUID" }
+  ]
+}
+```
+
+Replace placeholders with actual UUIDs. Discuss titles with the user; resolve ambiguous titles before calling. No indexes, group moves or complete-order inputs. Each of 1–100 moves applies to the preceding move's result; unaffected items retain relative order. All move references are validated before any write. Net no-ops perform only a read. Actual reorders normalize positions internally, PATCH only changed positions, then verify the checklist by GET. Content/completion and session Goal associations are untouched. Actor attribution comes from the session-header startup directory's `.scryer` creator, retaining the full identity. Missing identity fails closed. API URL precedence matches the PM helper: `SCRYER_API_BASE_URL`, `PI_PM_API_BASE_URL`, then `http://smux-linode:43210`.
+
+JEPM provides individual positional writes, **not atomic batch reordering**. Same-process calls for the same endpoint/Goal are serialized, but other instances can still write concurrently; read-back can detect discrepancies, not guarantee isolation or prevent all lost updates. Errors stop further writes and return confirmed update IDs, an uncertain item where applicable, and a best-effort observed order. No mutation retry, rollback, background recovery or backend changes. A failed verification is not success. Inspect partial/unknown outcomes before deciding what to do next.
+
+Tests: `PI_TEST_AGENT_ROOT=/path/to/@earendil-works/pi-coding-agent node --experimental-strip-types --test tests/scryer-checklist.test.ts`. Covers the registered tool through Pi's real loader, synthetic HTTP fixtures, cancellation, missing/foreign IDs, sequential moves, null/tied positions, partial writes, lost responses and read-back mismatch. Fixtures are not a deployed JEPM or UI acceptance test.
+
+The workload test executes both a one-shot authored HTTP script and the tool core against identical fixtures. For `ABCD → move C before A → CABD`, both use **one model-facing invocation and five HTTP requests**. Initial measurement: script arguments **1,662 UTF-8 bytes**, tool arguments **188 bytes** (88.7% less per-call authored input). This is not a tokenizer, LLM latency, total-context, or human-attention measurement; it excludes the fixed tool declaration, result text and UUID discovery. The extra serialized tool registration (`name`, `description`, `parameters`) is **1,630 bytes**: counted once alongside this invocation, definition + arguments is **1,818 bytes**, versus the script's 1,662 bytes. Thus this does **not** establish a first-call total-context saving, and repeated provider serialization/caching was not measured. No claim of fewer HTTP requests or model turns. The demonstrated workload reduction is no per-operation integration code authoring; the reusable tool additionally implements tested failure handling absent from the success-only baseline script.
+
 ## Session Goal tracking
 
 The comms extension creates `.scryer-<main-Pi-session-id>` in the session header's startup directory, with empty `current`, `finish`, `complete`, `abandon`, and `ready_for_review` arrays. Legacy files without `ready_for_review` treat it as empty and gain it on the next actual transition; malformed lists are not silently repaired. Resume/reload preserves existing data; other sessions' files (including checked-in ones) are ignored. A context message supplies the exact path. Files may be committed. This state is session-wide, not rolled back on `/tree`.
