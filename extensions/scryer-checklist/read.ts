@@ -32,6 +32,27 @@ export async function getChecklistForGoal(goalId: string, options: ReadOptions):
   // Preserve every API field, UUID spelling and API ordering; no projections or cache.
   return items;
 }
+export async function getTopLevelGoals(options: ReadOptions): Promise<Record<string, unknown>[]> {
+  const goals = await get("/api/goals?include_done=true&include_deleted=false", options);
+  const relationships = await get("/api/goal-relationships", options);
+  if (!Array.isArray(goals) || !Array.isArray(relationships)) throw new Error("JEPM returned non-array Goals or relationships.");
+  const seen = new Set<string>();
+  for (const goal of goals) {
+    if (!record(goal) || typeof goal.id !== "string" || typeof goal.title !== "string" || goal.deleted_at) throw new Error("JEPM returned an invalid or deleted Goal record.");
+    const id = goalUuid(goal.id);
+    if (seen.has(id)) throw new Error("JEPM returned duplicate Goal UUIDs.");
+    seen.add(id);
+  }
+  const children = new Set<string>();
+  for (const link of relationships) {
+    if (!record(link) || typeof link.source_goal_id !== "string" || typeof link.target_goal_id !== "string" || typeof link.relationship_type !== "string") throw new Error("JEPM returned an invalid Goal relationship.");
+    const source = goalUuid(link.source_goal_id);
+    goalUuid(link.target_goal_id);
+    // A parent outside the returned Goal set must not promote its child to root.
+    if (link.relationship_type === "supports" && !link.deleted_at) children.add(source);
+  }
+  return goals.filter(goal => !children.has(goal.id.toLowerCase()));
+}
 export type SubgoalNode = { goal: Record<string, unknown>; subgoals: SubgoalNode[] };
 export async function getSubgoalsForGoal(goalId: string, options: ReadOptions): Promise<SubgoalNode[]> {
   const root = goalUuid(goalId);

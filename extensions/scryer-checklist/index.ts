@@ -3,10 +3,24 @@ import { Type } from "@earendil-works/pi-ai";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { reorderChecklist } from "./order.ts";
-import { getChecklistForGoal, getSubgoalsForGoal } from "./read.ts";
+import { getChecklistForGoal, getSubgoalsForGoal, getTopLevelGoals } from "./read.ts";
 
 const uuid = () => Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" });
 export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "get_top_level_goals",
+    label: "Get top-level Goals",
+    description: "Read all undeleted JEPM Goals with NO recorded parent. No arguments: {}. A Goal has a parent when it is the source (child) of any active supports relationship; target is parent. Includes completed roots; a completed/hidden/unlisted parent does not turn its child into a root. Other relationship types and deleted edges do not establish parents. Returns Goal records with all list-API fields in API order, not nested descendants or expanded checklists. Empty result is []. Two HTTP GETs (Goals and relationships), no snapshot-isolation guarantee; failures are errors rather than partial/empty success. Read-only, no persistent cache, orientation or authorization changes. Present titles, not UUIDs, to the user.",
+    parameters: Type.Object({}, { additionalProperties: false }),
+    outputSchema: Type.Array(Type.Unknown()),
+    async execute(_id, _params, signal) {
+      const goals = await getTopLevelGoals({
+        baseUrl: process.env.SCRYER_API_BASE_URL || process.env.PI_PM_API_BASE_URL || "http://smux-linode:43210",
+        signal,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(goals) }], details: goals, structuredContent: goals };
+    },
+  });
   pi.registerTool({
     name: "get_checklist_for_goal",
     label: "Get Goal checklist",

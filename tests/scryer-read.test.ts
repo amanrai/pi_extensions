@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { getChecklistForGoal, getSubgoalsForGoal } from "../extensions/scryer-checklist/read.ts";
+import { getChecklistForGoal, getSubgoalsForGoal, getTopLevelGoals } from "../extensions/scryer-checklist/read.ts";
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const root = id(1), a = id(2), b = id(3), c = id(4), other = id(5);
 const fullGoal = (uuid: string) => ({ id: uuid, title: `Goal ${uuid}`, description_md: "Preserve me", is_done: 1, checklist_items: [{ title: "Retained checklist" }], extra: { future_field: true } });
@@ -12,7 +12,8 @@ const edge = (source: string, target: string, extra = {}) => ({ source_goal_id: 
 function fixture(routes: Record<string, unknown>) {
   const calls: { path: string; method: string | undefined }[] = [];
   const options = { baseUrl: "http://synthetic.invalid/", fetch: (async (url, init) => {
-    const path = new URL(String(url)).pathname;
+    const parsed = new URL(String(url));
+    const path = parsed.pathname + parsed.search;
     calls.push({ path, method: init?.method });
     assert.equal(init?.method, "GET"); assert.equal(init?.body, undefined);
     const body = routes[path];
@@ -114,6 +115,53 @@ test("failed descendant read, bad relationships and wrong Goal identity never re
   ]) await assert.rejects(getSubgoalsForGoal(root, hierarchy(changes).options));
 });
 
+const topGoalsPath = "/api/goals?include_done=true&include_deleted=false";
+test("top-level means no recorded parent; preserves full list fields, completed roots and API order", async () => {
+  const goals = [fullGoal(b), fullGoal(root), fullGoal(a), fullGoal(c)];
+  const f = fixture({ [topGoalsPath]: goals, "/api/goal-relationships": [edge(a, root), edge(c, a)] });
+  assert.deepEqual(await getTopLevelGoals(f.options), [fullGoal(b), fullGoal(root)]);
+  assert.deepEqual(f.calls.map(c => c.path), [topGoalsPath, "/api/goal-relationships"]);
+});
+
+test("multiple/completed/unlisted parents never promote children; only active supports edges count", async () => {
+  const f = fixture({
+    [topGoalsPath]: [fullGoal(root), fullGoal(a), fullGoal(b), fullGoal(c)],
+    "/api/goal-relationships": [edge(a, root), edge(a, other), edge(b, other), edge(c, root, { deleted_at: "yesterday" }), edge(c, root, { relationship_type: "related" })],
+  });
+  assert.deepEqual((await getTopLevelGoals(f.options)).map(g => g.id), [root, c]);
+});
+
+test("cycles have no roots; an empty goal collection is an empty successful result", async () => {
+  assert.deepEqual(await getTopLevelGoals(fixture({ [topGoalsPath]: [fullGoal(a), fullGoal(b)], "/api/goal-relationships": [edge(a, b), edge(b, a)] }).options), []);
+  assert.deepEqual(await getTopLevelGoals(fixture({ [topGoalsPath]: [], "/api/goal-relationships": [] }).options), []);
+});
+
+test("top-level listing fails on unavailable/invalid/duplicate/deleted records instead of false roots", async () => {
+  for (const changes of [
+    { [topGoalsPath]: Response.json({}, { status: 503 }) },
+    { [topGoalsPath]: {} }, { [topGoalsPath]: [fullGoal(a), fullGoal(a)] },
+    { [topGoalsPath]: [{ ...fullGoal(a), id: "bad" }] },
+    { [topGoalsPath]: [{ ...fullGoal(a), deleted_at: "yesterday" }] },
+    { "/api/goal-relationships": new Error("offline") },
+    { "/api/goal-relationships": {} }, { "/api/goal-relationships": [null] },
+    { "/api/goal-relationships": [edge(a, "bad")] },
+  ]) {
+    const f = fixture({ [topGoalsPath]: [fullGoal(root)], "/api/goal-relationships": [], ...changes });
+    await assert.rejects(getTopLevelGoals(f.options));
+  }
+});
+
+test("cancelled root listing performs no network work and no persisted cache hides new parents", async () => {
+  const routes = { [topGoalsPath]: [fullGoal(root), fullGoal(a)], "/api/goal-relationships": [] as unknown[] };
+  const f = fixture(routes);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(getTopLevelGoals({ ...f.options, signal: controller.signal }));
+  assert.equal(f.calls.length, 0);
+  assert.equal((await getTopLevelGoals(f.options)).length, 2);
+  routes["/api/goal-relationships"].push(edge(a, root));
+  assert.deepEqual((await getTopLevelGoals(f.options)).map(g => g.id), [root]);
+});
+
 const host = process.env.PI_TEST_AGENT_ROOT;
 test("registered nested-subgoal tool executes through Pi loader and real HTTP without an identity", { skip: !host }, async t => {
   const routes: Record<string, unknown> = {
@@ -121,6 +169,8 @@ test("registered nested-subgoal tool executes through Pi loader and real HTTP wi
     [`/api/goals/${a}`]: fullGoal(a), [`/api/goals/${a}/relationships`]: [edge(c, a)],
     [`/api/goals/${c}`]: fullGoal(c), [`/api/goals/${c}/relationships`]: [],
   };
+  routes[topGoalsPath] = [fullGoal(root), fullGoal(a), fullGoal(c)];
+  routes["/api/goal-relationships"] = [edge(a, root), edge(c, a)];
   const calls: string[] = [];
   const server = createServer((req, res) => {
     assert.equal(req.method, "GET"); calls.push(req.url!);
@@ -141,6 +191,10 @@ test("registered nested-subgoal tool executes through Pi loader and real HTTP wi
   const result = await tool.execute("nested", { goal_id: root }, undefined, undefined, {});
   assert.deepEqual(result.details, expected); assert.deepEqual(result.structuredContent, expected);
   assert.deepEqual(JSON.parse(result.content[0].text), expected); assert.equal(calls.length, 6);
+  const roots = await loaded.extensions[0].tools.get("get_top_level_goals").definition.execute("roots", {}, undefined, undefined, {});
+  assert.deepEqual(roots.structuredContent, [fullGoal(root)]);
+  assert.deepEqual(JSON.parse(roots.content[0].text), [fullGoal(root)]);
+  assert.equal(calls.length, 8);
   delete routes[`/api/goals/${c}`];
   await assert.rejects(tool.execute("failure", { goal_id: root }, undefined, undefined, {}), /404/);
 });
