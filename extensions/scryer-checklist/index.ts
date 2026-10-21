@@ -3,9 +3,38 @@ import { Type } from "@earendil-works/pi-ai";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { reorderChecklist } from "./order.ts";
+import { getChecklistForGoal, getSubgoalsForGoal } from "./read.ts";
 
 const uuid = () => Type.String({ pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" });
 export default function (pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "get_checklist_for_goal",
+    label: "Get Goal checklist",
+    description: "Read the full active checklist for one JEPM Goal. Supply goal_id (UUID). Returns all checklist items in current API order, preserving every API-provided item field, including UUID, title, description, completion, position and timestamps. Empty checklist returns []. Deleted items and separate comment histories are not included. One HTTP GET; no caching, writes, orientation or authorization changes. Use returned UUIDs for checklist operations; present titles to the user and clarify ambiguous titles. HTTP/invalid-response failures are errors, never an empty-success substitute.",
+    parameters: Type.Object({ goal_id: uuid() }, { additionalProperties: false }),
+    outputSchema: Type.Array(Type.Unknown()),
+    async execute(_id, params, signal) {
+      const items = await getChecklistForGoal(params.goal_id, {
+        baseUrl: process.env.SCRYER_API_BASE_URL || process.env.PI_PM_API_BASE_URL || "http://smux-linode:43210",
+        signal,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(items) }], details: items, structuredContent: items };
+    },
+  });
+  pi.registerTool({
+    name: "get_subgoals_for_goal",
+    label: "Get nested sub-Goals",
+    description: "Read all nested sub-Goals for one JEPM Goal UUID (goal_id). Returns a hierarchy array of {goal: full API Goal record, subgoals: [...same structure...]}; excludes the requested root itself. Follows active recorded supports links: source is child, target is parent. Recurses to leaves, retaining completed Goals and preserving API relationship order; repeated edges are deduplicated. Shared descendants appear under each parent, fetched once per call. No descendants returns []; missing Goals, cycles or incomplete/failed reads are errors, never partial success. GET only; no mutation, orientation or authorization changes. No persisted cache. Present titles, not UUIDs, to the user.",
+    parameters: Type.Object({ goal_id: uuid() }, { additionalProperties: false }),
+    outputSchema: Type.Array(Type.Unknown()),
+    async execute(_id, params, signal) {
+      const subgoals = await getSubgoalsForGoal(params.goal_id, {
+        baseUrl: process.env.SCRYER_API_BASE_URL || process.env.PI_PM_API_BASE_URL || "http://smux-linode:43210",
+        signal,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(subgoals) }], details: subgoals, structuredContent: subgoals };
+    },
+  });
   pi.registerTool({
     name: "scryer_reorder_checklist",
     label: "Reorder Scryer checklist",

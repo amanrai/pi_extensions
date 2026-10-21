@@ -14,7 +14,15 @@ Personal [pi](https://github.com/badlogic/pi-mono) extension package.
 - `starship-footer.ts` — Starship-powered footer with `agent_name@folder` from the startup `.scryer`, PR link, model, thinking level, tokens, and Codex subscription-aware cost display.
 - `pi-codex-account` — bundled third-party `/codex` account-profile commands for saving, switching, and checking usage of named OpenAI Codex logins.
 
-## Scryer checklist ordering
+## Scryer read tools and checklist ordering
+
+`scryer-checklist/` exposes three non-overlapping operations:
+
+- **`get_checklist_for_goal({goal_id})`**: one GET returning the full active checklist array in current API order, preserving all API-provided fields. Empty is `[]`; missing Goals, malformed responses and network failures are errors. Separate comment histories and deleted items are not included.
+- **`get_subgoals_for_goal({goal_id})`**: all nested sub-Goals as `[{goal: <full API record>, subgoals: [...]}]`, excluding the requested root. Follows active `supports` edges (source child, target parent), retaining completed Goals and recorded relationship order. Duplicate edges are deduplicated; shared descendants appear under each parent but each record/relationship list is fetched once per invocation. Cycles or failed descendant reads fail the operation instead of claiming a complete tree. No persistent cache or automatic retries. Uses two GETs per unique visited Goal (including root). These tools are read-only, require no startup identity, and do not change orientation or execution authorization. Structured results are also available to programmatic callers.
+- **`scryer_reorder_checklist`**: only changes checklist positions, as described below.
+
+Both read tools use the same API URL precedence as ordering. Their ordinary use is self-contained in the tool definitions. Read tests: `node --experimental-strip-types --test tests/scryer-read.test.ts` (set `PI_TEST_AGENT_ROOT` to include real Pi-loader integration tests).
 
 `scryer-checklist/` registers **`scryer_reorder_checklist`**. Its model-facing definition is sufficient for ordinary use; no PM skill, endpoint discovery or authored script is needed once UUIDs are known.
 

@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { planOrder, reorderChecklist, validateInput, type Item, type Move } from "../extensions/scryer-checklist/order.ts";
+import { getChecklistForGoal } from "../extensions/scryer-checklist/read.ts";
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const goal = id(99);
 const items = (): Item[] => ["A", "B", "C", "D"].map((title, i) => ({ id: id(i + 1), goal_id: goal, title, display_order: i }));
@@ -162,7 +163,7 @@ test("same-process calls on one checklist serialize their read-modify-write oper
 });
 
 const host = process.env.PI_TEST_AGENT_ROOT;
-test("installed Pi loads exactly one tool; registered execute uses startup identity, returns errors, requires no skill", { skip: !host }, async t => {
+test("installed Pi loads distinct read/reorder tools; registered execute uses startup identity, returns errors, requires no skill", { skip: !host }, async t => {
   const f = await fixture(t);
   const directory = await mkdtemp(join(tmpdir(), "checklist-tool-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -173,7 +174,14 @@ test("installed Pi loads exactly one tool; registered execute uses startup ident
   const loaded = await loadExtensions([resolve("extensions/scryer-checklist/index.ts")], directory);
   assert.deepEqual(loaded.errors, []);
   const tools = loaded.extensions[0].tools;
-  assert.deepEqual([...tools.keys()], ["scryer_reorder_checklist"]);
+  assert.deepEqual([...tools.keys()], ["get_checklist_for_goal", "get_subgoals_for_goal", "scryer_reorder_checklist"]);
+  const readTool = tools.get("get_checklist_for_goal").definition;
+  const readResult = await readTool.execute("read", { goal_id: goal }, undefined, undefined, {});
+  assert.deepEqual(readResult.details, f.rows);
+  assert.deepEqual(readResult.structuredContent, f.rows);
+  assert.deepEqual(JSON.parse(readResult.content[0].text), f.rows);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].method, "GET", "read tool needs no startup identity or skill");
   const tool = tools.get("scryer_reorder_checklist").definition;
   console.log("TOOL_DEFINITION " + JSON.stringify({
     serialized_registration_bytes: Buffer.byteLength(JSON.stringify({ name: tool.name, description: tool.description, parameters: tool.parameters })),
